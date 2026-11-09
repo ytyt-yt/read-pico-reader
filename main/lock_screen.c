@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "wallpaper_rotation.h"
 #define FRAME_BYTES (684u*1216u/2u)
 #ifndef LOCK_SCREEN_CACHE_PARENT
 #define LOCK_SCREEN_CACHE_PARENT "/sdcard/.readpico"
@@ -44,7 +45,7 @@ typedef struct {uint32_t magic,rotation,style,checksum;uint64_t wallpaper;} art_
 static uint32_t checksum(const uint8_t *bytes){uint32_t h=2166136261u;for(unsigned i=0;i<FRAME_BYTES;++i)h=(h^bytes[i])*16777619u;return h;}
 static uint64_t wallpaper_key(void){
     if(app_settings_lock_style()!=1 && app_settings_lock_style()!=3)return 0;
-    const char *path=app_settings_lock_style()==3?app_settings_bookmark_path():app_settings_wallpaper_path();
+    const char *path=app_settings_lock_style()==3?app_settings_bookmark_path():wallpaper_rotation_path();
     uint64_t key=UINT64_C(14695981039346656037);
     for(const unsigned char *p=(const unsigned char*)path;*p;++p)key=(key^*p)*UINT64_C(1099511628211);
 #if KIIKO_BOARD_METALIO47

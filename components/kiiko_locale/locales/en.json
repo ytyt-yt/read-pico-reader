@@ -1225,5 +1225,16 @@
   "浏览器传书支持 EPUB、TXT、CBZ、字体和图片文件。": "Upload EPUB, TXT, CBZ, fonts and images in your browser.",
   "漫画始终显示图片": "Comic images always shown",
   "章节缺失或目录不可读": "Chapter missing or folder unreadable",
-  "清晰水波纹": "Clear ripple"
+  "清晰水波纹": "Clear ripple",
+  "选择壁纸显示方式": "Choose wallpaper mode",
+  "固定壁纸": "Fixed wallpaper",
+  "随机壁纸": "Random wallpapers",
+  "选择一张图片，每次锁屏显示": "Use the same image for every lock",
+  "每次锁屏换一张，整组显示完再洗牌": "A new image each lock; shuffle after a full round",
+  "随机壁纸文件夹": "Random wallpaper folder",
+  "已找到 %u 张图片 · 最多 256 张": "%u images found · Up to 256",
+  "支持 JPG / JPEG / PNG，不扫描子文件夹": "JPG / JPEG / PNG; no subfolders",
+  "图片超过 256 张，请减少文件夹内的图片": "Over 256 images; remove some from this folder",
+  "请放入图片；不可用时使用固定壁纸或锁图": "Add images here; fixed wallpaper or lock icon is the fallback",
+  "重新扫描壁纸": "Rescan wallpapers"
 }

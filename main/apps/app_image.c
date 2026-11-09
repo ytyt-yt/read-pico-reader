@@ -372,7 +372,7 @@ static app_redraw_t on_gesture(app_ctx_t *ctx, const ui_gesture_event_t *event) 
                     snprintf(s_message,sizeof(s_message),"透明书封请选择 PNG 图片");return IMAGE_ACTION_REDRAW;
                 }
                 const char *path=s_items[s_selected].path;
-                if(style==1)app_settings_set_wallpaper_path(path);else app_settings_set_bookmark_path(path);
+                if(style==1) { if(app_settings_set_wallpaper_random(false)!=ESP_OK)return APP_REDRAW_PAGE;app_settings_set_wallpaper_path(path); } else app_settings_set_bookmark_path(path);
                 const char *saved=style==1?app_settings_wallpaper_path():app_settings_bookmark_path();
                 if(strcmp(saved,path)){snprintf(s_message,sizeof(s_message),"设定未完成，请重试");return IMAGE_ACTION_REDRAW;}
                 app_settings_set_lock_style(style);

@@ -773,3 +773,6 @@ bool ble_pt_connected(void) { return false; }
 
 // 引导出口状态由独立setup测试覆盖；此组保持正常页面。/ Setup state is exercised separately; these fixtures use normal pages.
 bool app_setup_pending(void){return false;}
+
+void wallpaper_rotation_invalidate(void) {}
+void wallpaper_rotation_idle(void) {}

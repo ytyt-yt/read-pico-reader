@@ -8,6 +8,9 @@
 /// S31 baseline hardware / full progressive software; callers rewind before legacy fallback.
 bool metalio_jpeg_gray(const uint8_t *data, size_t size, FILE *file,
                        unsigned width, unsigned height, uint8_t *out);
+/// 附加调用方取消检查，覆盖硬解读取/缩放和渐进式扫描。/ Also poll caller cancellation during hardware reads/scaling and progressive scans.
+bool metalio_jpeg_gray_active(const uint8_t *data, size_t size, FILE *file,
+                              unsigned width, unsigned height, uint8_t *out, bool (*active)(void));
 
 /// 取消正在运行的S31 JPEG；调用方在卸卡前等待其协作退出。/ Cancel S31 JPEG cooperatively and join before unmounting.
 void metalio_jpeg_cancel(void);

@@ -37,10 +37,15 @@ static int lock_resume_media_io(uint32_t wait_ms){assert(!wait_ms&&!s_lock_sleep
 static uint8_t app_settings_lock_style(void){return style;}
 static const char*app_settings_wallpaper_path(void){return "/sdcard/wall.jpg";}
 static const char*app_settings_bookmark_path(void){return "/sdcard/overlay.png";}
+static void wallpaper_rotation_begin(void){}
+static void wallpaper_rotation_finish(bool displayed){(void)displayed;}
+static bool book_cover_jobs_quiesce(unsigned ms){assert(ms==2000);return true;}
+static bool wallpaper_rotation_prepare(uint8_t *fb);
 static bool lock_pin_enabled(void){return pin;}
 static bool art(unsigned id,uint8_t*f){assert(id==style);if(id==3)assert(f[0]==(boot_cache?255:background));if(id==1&&!boot_cache)assert(!white_outputs&&panel[0]==background);++draws[id];memset(f,0x10+id,FRAME_BYTES);return decode_ok;}
 static bool book_ticket_draw(uint8_t*f,bool reader){(void)reader;return art(0,f);}
 static bool ui_wallpaper_prepare_lock(uint8_t*f,const char*p){assert(!strcmp(p,app_settings_wallpaper_path()));return art(1,f);}
+static bool wallpaper_rotation_prepare(uint8_t *fb){return ui_wallpaper_prepare_lock(fb,app_settings_wallpaper_path());}
 static bool book_lock_collage_prepare(uint8_t*f){return art(2,f);}
 static bool book_lock_bookmark_draw(uint8_t*f,const char*p){assert(!strcmp(p,app_settings_bookmark_path()));return art(3,f);}
 static void ui_wallpaper_cache_commit(const uint8_t*f){assert(style==1&&presents==1&&!memcmp(f,panel,FRAME_BYTES));}
@@ -67,8 +72,8 @@ static void pico_boot_clear_resume(void){++cleared;}
 static bool pico_boot_has_resume(void){return boot_cache;}
 static bool pico_boot_lock_pending(void){return false;}
 static bool metalio_boot_power_key(void){return false;}
-static unsigned app_settings_wake_presses(void){return 1;}
-static void read_pico_pmu_latch_power_wakeup(void){assert(false);}
+static __attribute__((unused)) unsigned app_settings_wake_presses(void){return 1;}
+static __attribute__((unused)) void read_pico_pmu_latch_power_wakeup(void){assert(false);}
 static void app_settings_record_pin_lock(uint32_t at){assert(at==0||at>=1704067200);}
 static void pico_boot_ready(void){}
 static void pico_boot_hold_resume(void){}
@@ -84,7 +89,7 @@ static int epd_height(void){return 684;}
 static int read_pico_sd_get_info(read_pico_sd_info_t*i){i->mounted=true;return 0;}
 static void vTaskDelay(int ms){assert(ms==20);}
 '''
-for name in ['lock_present_art','draw_wallpaper','enter_lock_and_sleep','app_lock_boot_gate']:u+=function(name,r/'main/sleep.c')+'\n'
+for name in ['lock_clear_wake_target','lock_present_art','draw_wallpaper','enter_lock_and_sleep','app_lock_boot_gate']:u+=function(name,r/'main/sleep.c')+'\n'
 u+=r'''
 static void reset(void){media_resumes=0;memset(draws,0,sizeof(draws));presents=outputs=auths=begins=ends=resumes=cleared=waits=saves=lamp_off=lamp_restore=white_outputs=white_faults=image_clears=0;system_binary=pin=boot_cache=s_lock_feedback_started=s_lock_deep_ready=s_lock_frame_cached=false;s_lock_sleep_touch=NULL;decode_ok=transfer_ok=ble_ok=output_ok=white_ok=true;cache_ok=false;background=0x32;memset(panel,background,FRAME_BYTES);memset(pixels,0x99,FRAME_BYTES);}
 int main(void){EpdiyHighlevelState hl={panel};

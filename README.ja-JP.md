@@ -2,6 +2,8 @@
 
 > **利用条件：** 今後、新たな独自制作物に[個人学習ライセンス](licenses/kiikoread-Personal-Study-1.0.txt)を明示した場合、個人学習を許可し、別途書面による許諾のない商用利用を禁止します。**rc93 以前のコード・配布物、既存の Apache-2.0 の権利、第三者ライセンスは変更しません。** 適用範囲は [LICENSE](LICENSE) を参照してください。
 
+ランダム壁紙は **設定 → ロック画面 → 壁紙** で有効にできます。TFカードの `pictures/wallpapers/` に JPG/JPEG/PNG を最大256枚配置してください（サブフォルダーは対象外）。新しいロックごとに画像を切り替え、一巡後に再シャッフルします。復帰とPIN画面では同じ画像を保持します。16階調キャッシュはアイドル中に準備され、デコード中もキャンセルできます。破損画像は回数を制限してスキップし、失敗したバッチの続きは次のロック時に処理します。表示成功後に進行状況をTFへ保存し、設定バックアップにはモードを保存します。
+
 公開プロジェクト名は **kiikoread** です。Web サイトでは機器を「墨水屏」と表記し、GitHub URL・更新 URL・既存のバックアップ名は維持します。本体表示も kiikoread に統一します。白い公式サイトに画面プレビュー、機能紹介、版選択、Web USB 書き込み、Bin ダウンロードと[使用説明](flash/manual.html)を用意しました。`python3 tools/stage_public_flash.py _site` で公開ファイルを生成し、GitHub Pages / Cloudflare Pages の出力先を `_site` に設定できます。HTML と PDF は `docs/user-manual.zh-CN.json` から `tools/build_user_manual.py --font /path/to/a/static-CJK.ttf` で生成します（Python ReportLab が必要です）。
 正式 Bin は [GitHub Releases](https://github.com/wegooo-cell/read-pico-reader/releases) に保存し、公開サイト生成時に取得・検証します。OTA は kiikoread.com を優先し、失敗時は従来の GitHub 更新元へ戻ります。主サイトの生成は `python3 tools/stage_public_flash.py _site --ota-origin https://kiikoread.com`、GitHub Pages では既定パラメーターを使います。
 

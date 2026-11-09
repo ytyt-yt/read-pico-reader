@@ -27,3 +27,6 @@ bool ui_wallpaper_prepare_lock(uint8_t *framebuffer,const char *path);
 /// 在最终画面显示成功后、密码层覆盖前调用；复用调用者画布，不新增整帧。
 /// Persist after successful presentation, before the PIN overlay, using the caller's unchanged canvas.
 void ui_wallpaper_cache_commit(const uint8_t *framebuffer);
+
+/// 仅在封面工作线程中预热，不借用前台帧；取消后不写缓存。/ Warm only on the cover worker, with a private frame and no writes after cancellation.
+void ui_wallpaper_warm_cache(const char *path, bool (*active)(void));

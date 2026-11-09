@@ -41,6 +41,10 @@ uint64_t book_cover_source_fingerprint(const char *path);
 #define BOOK_IMAGE_FILE_MAX (50u * 1024u * 1024u)
 bool book_image_file_dimensions(const char *path, bool png, unsigned *width, unsigned *height);
 bool book_image_file_grayscale(const char *path, bool png, unsigned width, unsigned height, uint8_t *out);
+/// 后台文件解码在读块/行/MCU时检查active；NULL表示不取消，取消后不再进入后备解码。
+/// Background file decode polls active at reads/rows/MCUs; NULL disables cancellation, and cancellation prevents fallback.
+bool book_image_file_grayscale_active(const char *path, bool png, unsigned width, unsigned height,
+                                      uint8_t *out, bool (*active)(void));
 
 bool book_jpeg_frame(const uint8_t *data, size_t size, uint8_t *sof, unsigned *width, unsigned *height);
 

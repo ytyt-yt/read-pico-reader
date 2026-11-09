@@ -2,6 +2,8 @@
 
 ## 本地测试 / Local test — 2026-11-09
 
+- 双板本地新增随机锁屏壁纸：设置 → 锁屏样式 → 壁纸锁屏可选固定或随机，随机读取 TF `pictures/wallpapers` 单层 JPG/JPEG/PNG（最多256张），整组洗牌轮换并避免轮次交界连播同图。只在新锁屏且显示成功后提交进度，唤醒/PIN保留本次图片；逐图16灰缓存通过既有封面队列空闲预热，解码中可取消；损坏图片有界跳过，失败批次跨锁屏继续，固定图片和原锁屏出口保留。设置备份v23兼容恢复旧版本，版本号不变。
+
 - 修复漫画搜索键盘与底部导航重叠，补齐漫画界面中英翻译；章节数量、进度及提示先翻译再格式化，漫画名、文件名与输入保留原文。
   Keep comic search keys above bottom navigation and complete bilingual comic labels, counts, progress and notices while preserving user names, filenames and input.
 - Pico新增独立“清晰水波纹”，与原水波纹相邻切换并保存选择；采用完整48相GL16及同灰迁移，追加12相擦白、4相补黑和三相末尾保持，共65相。清晰文字档使用FULL扫描及127行预填；原水波纹、字体、图文刷新和高压释放顺序保持，备份兼容旧版及S31。

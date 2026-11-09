@@ -149,7 +149,9 @@ static int loaded_shelf_order=-1;
 #if KIIKO_BOARD_METALIO47
 static bool test_shutdown_storage;static int loaded_shutdown;
 #endif
+static int loaded_wallpaper_random=-1;
 esp_err_t nvs_get_u8(nvs_handle_t h, const char *key, uint8_t *value) {
+    if(!strcmp(key,NVS_KEY_WALLPAPER_RANDOM)&&loaded_wallpaper_random>=0){*value=(uint8_t)loaded_wallpaper_random;return ESP_OK;}
     if(!strcmp(key,NVS_KEY_DEFAULT_FULLSCREEN)&&loaded_default_full>=0){*value=(uint8_t)loaded_default_full;return ESP_OK;}
     if (!strcmp(key, NVS_KEY_BOOK_RULE_FULL) && loaded_rule_full >= 0) { *value = (uint8_t)loaded_rule_full; return ESP_OK; }
 #if KIIKO_BOARD_METALIO47
@@ -162,6 +164,7 @@ esp_err_t nvs_get_u8(nvs_handle_t h, const char *key, uint8_t *value) {
 #endif
  (void)h; if(test_full_storage&&!strcmp(key,NVS_KEY_READER_FULL)){*value=loaded_full_pages;return ESP_OK;} if(!strcmp(key,NVS_KEY_READER_TURN)&&loaded_turn>=0){*value=(uint8_t)loaded_turn;return ESP_OK;} if(!strcmp(key,NVS_KEY_BOOK_PARA)&&has_para){*value=loaded_para;return ESP_OK;} if(!strcmp(key,NVS_KEY_BOOK_TRACK)&&has_tracking){*value=loaded_tracking;return ESP_OK;} if(!strcmp(key,NVS_KEY_BOOK_WEIGHT_FINE)&&has_fine){*value=loaded_fine;return ESP_OK;} if(!strcmp(key,NVS_KEY_HOME_COMPONENT)&&loaded_home>=0){*value=(uint8_t)loaded_home;return ESP_OK;} if(!strcmp(key,NVS_KEY_BOOK_AA)&&has_aa){*value=loaded_aa;return ESP_OK;} if(!strcmp(key,NVS_KEY_READER_KEYS_V2)&&keys_v2){*value=1;return ESP_OK;} if(!strcmp(key,NVS_KEY_BOOK_WEIGHT)&&has_weight){*value=loaded_weight;return ESP_OK;} if(!strcmp(key,NVS_KEY_BOOK_INDENT_ADJUST)&&has_adjust){*value=loaded_adjust;return ESP_OK;} if(!strcmp(key,NVS_KEY_SHELF_STYLE)&&loaded_shelf>=0){*value=(uint8_t)loaded_shelf;return ESP_OK;} if(!strcmp(key,NVS_KEY_SHELF_V22)&&loaded_shelf_v22){*value=1;return ESP_OK;} if(!strcmp(key,NVS_KEY_LOCK_STYLE)&&loaded_lock>=0){*value=(uint8_t)loaded_lock;return ESP_OK;} if(!strcmp(key,NVS_KEY_HOLD_ACTION)&&has_hold){*value=loaded_hold;return ESP_OK;} for(unsigned i=0;i<3;++i) if(!strcmp(key,s_reader_key_names[i])&&has_keys[i]){*value=loaded_keys[i];return ESP_OK;} if (!strcmp(key, NVS_KEY_MAIN_REFRESH) && has_main_mode) { *value=loaded_main_mode;return ESP_OK; } if (!strcmp(key, "ui_fast")) { *value = test_loaded_fast; return ESP_OK; } if (!strcmp(key, NVS_KEY_SYS_SIZE) && test_loaded_system_size) { *value = test_loaded_system_size; return ESP_OK; } return ESP_FAIL; }
 esp_err_t nvs_set_u8(nvs_handle_t h, const char *key, uint8_t value) {
+    if(!strcmp(key,NVS_KEY_WALLPAPER_RANDOM)&&!commit_fails)loaded_wallpaper_random=value;
     if(!strcmp(key,NVS_KEY_DEFAULT_FULLSCREEN)&&!commit_fails)loaded_default_full=value;
     if (!strcmp(key, NVS_KEY_BOOK_RULE_FULL) && !commit_fails) loaded_rule_full = value;
 #if KIIKO_BOARD_METALIO47
@@ -706,7 +709,9 @@ int main(void) {
     assert(fwrite(&legacy, 1, sizeof(legacy), file) == sizeof(legacy));
     assert(fclose(file) == 0);
     s_book_indent = 0;
+    s_wallpaper_random=true;
     assert(app_settings_backup_restore() == ESP_OK && s_book_indent == 2);
+    assert(!app_settings_wallpaper_random());
     /* A backup without a configured network clears an existing saved network. */
     memset(&saved_wifi, 0, sizeof(saved_wifi));
     assert(app_settings_backup_save() == ESP_OK);
@@ -983,6 +988,16 @@ int main(void) {
       assert(app_settings_reader_default_fullscreen()==(bool)full&&app_settings_reader_immersive()==(bool)immersive);
     }
     assert(app_settings_set_reader_default_fullscreen(false));app_settings_set_reader_immersive(false);
+    assert(!app_settings_wallpaper_random());
+    commit_fails=true;
+    assert(app_settings_set_wallpaper_random(true)!=ESP_OK && !app_settings_wallpaper_random());
+    commit_fails=false;
+    assert(app_settings_set_wallpaper_random(true)==ESP_OK && app_settings_wallpaper_random() && app_settings_lock_style()==1);
+    assert(app_settings_backup_save()==ESP_OK);
+    assert(app_settings_set_wallpaper_random(false)==ESP_OK);
+    assert(app_settings_backup_restore()==ESP_OK && app_settings_wallpaper_random() && app_settings_lock_style()==1);
+    s_wallpaper_random=false;app_settings_init();assert(app_settings_wallpaper_random());
+    assert(app_settings_set_wallpaper_random(false)==ESP_OK);
     puts("settings backup host test passed (200% sizes, retired shelf migration, collage persistence/restore without wallpaper, unified backup name with both boards' legacy names)");
     return 0;
 }

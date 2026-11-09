@@ -25,6 +25,10 @@ bool book_cover_thumbnail(const uint8_t*p,size_t n,bool png,uint8_t*out){return 
 book_crop_t book_cover_crop(unsigned sw,unsigned sh,unsigned dw,unsigned dh){if(!sw||!sh||!dw||!dh)return(book_crop_t){0};double scale=fmax((double)dw/sw,(double)dh/sh);unsigned w=dw/scale,h=dh/scale;return(book_crop_t){(sw-w)/2,(sh-h)/2,w,h};}
 bool book_image_file_dimensions(const char*p,bool png,unsigned*w,unsigned*h){int x,y,c;if(!stbi_info(sim_path(p),&x,&y,&c))return false;*w=x;*h=y;return true;}
 bool book_image_file_grayscale(const char*p,bool png,unsigned w,unsigned h,uint8_t*out){int sw=0,sh=0,c;uint8_t *rgba=stbi_load(sim_path(p),&sw,&sh,&c,4);bool ok=resize(rgba,sw,sh,w,h,out,NULL,true);stbi_image_free(rgba);return ok;}
+// 模拟器使用同步宿主解码；设备端另有逐行/块取消。/ Simulator codecs are synchronous; device codecs also cancel within rows/blocks.
+bool book_image_file_grayscale_active(const char*p,bool png,unsigned w,unsigned h,uint8_t*out,bool (*active)(void)){
+ return (!active||active())&&book_image_file_grayscale(p,png,w,h,out)&&(!active||active());
+}
 bool book_png_file_layer(const char*p,unsigned w,unsigned h,uint8_t*gray,uint8_t*alpha){int sw=0,sh=0,c;uint8_t *rgba=stbi_load(sim_path(p),&sw,&sh,&c,4);bool ok=resize(rgba,sw,sh,w,h,gray,alpha,false);stbi_image_free(rgba);return ok;}
 bool book_cover_load_list_gray(const char*p,const char*t,const char*a,uint8_t*out,bool allow,bool*pending,unsigned*w,unsigned*h){
     *w=BOOK_COVER_W;*h=BOOK_COVER_H;if(pending)*pending=false;uint8_t*data=NULL;size_t n=0;bool png;
