@@ -42,6 +42,7 @@ static bool s_search, s_scan_pending, s_request;
 static int s_page, s_root_page, s_requested_page, s_pressed = -1;
 static uint8_t s_style;
 static unsigned s_revision, s_cover_generation;
+static unsigned s_cover_checks;
 static bool s_key_mode;
 static int s_key_delta, s_key_pressed;
 static int64_t s_key_until;
@@ -70,6 +71,7 @@ static void fit(char *text, int px, int width) {
 }
 static void drop_covers(void) {
     book_cover_jobs_cancel(s_cover_generation); s_cover_generation = 0;
+    s_cover_checks = 0;
     for (unsigned i = 0; i < 9; ++i) {
         free(s_covers[i].gray); free(s_covers[i].bits);
     }
@@ -160,8 +162,7 @@ static bool prepare(bool decode) {
         int state = book_cover_jobs_take(s_cover_generation, row, &result);
         if (!state) continue;
         s_covers[row].ready = true; s_covers[row].index = index;
-        s_covers[row].fingerprint = state > 0 ? result.source_fingerprint
-            : book_cover_source_fingerprint(entry->path);
+        s_covers[row].fingerprint = result.source_fingerprint;
         if (state > 0) {
             s_covers[row].bits = result.fast ? result.pixels : NULL;
             s_covers[row].gray = result.fast ? NULL : result.pixels;
@@ -420,13 +421,20 @@ static app_redraw_t tick(app_ctx_t *ctx) {
         s_style = app_settings_shelf_style(); clamp(); drop_covers(); return APP_REDRAW_PAGE;
     }
     if (s_revision != book_store_revision()) { scan(); return APP_REDRAW_PAGE; }
-    if (ctx->now_ms - s_poll > 2000) {
+    if (!s_cover_checks && ready() && ctx->now_ms - s_poll > 2000) {
         s_poll = ctx->now_ms;
         for (int row = 0; row < ui_shelf_rows(s_style); ++row) {
-            size_t index = index_at(row);
-            if (index != SIZE_MAX && s_covers[row].ready && s_covers[row].fingerprint != book_cover_source_fingerprint(s_catalog.entries[index].path)) {
-                drop_covers(); return APP_REDRAW_PAGE;
-            }
+            if (index_at(row) != SIZE_MAX) s_cover_checks |= 1u << row;
+        }
+    }
+    for (int row = 0; row < ui_shelf_rows(s_style); ++row) {
+        if (!(s_cover_checks & (1u << row))) continue;
+        uint64_t fingerprint = 0;
+        int state = book_cover_jobs_recheck(s_cover_generation, row, &fingerprint);
+        if (!state) continue;
+        s_cover_checks &= ~(1u << row);
+        if (state > 0 && fingerprint != s_covers[row].fingerprint) {
+            drop_covers(); return APP_REDRAW_PAGE;
         }
     }
     if (prepare(true)) return APP_REDRAW_PAGE;
@@ -450,6 +458,9 @@ void app_comics_save_navigation(const char *directory, int page) {
 }
 static void before_lock(app_ctx_t *ctx) {
     (void)ctx; s_pressed = -1; ui_keyboard_release(); s_key_delta = s_key_pressed = 0;
+    // 睡眠会使队列代次失效；唤醒后由空代次重新提交封面与复查。
+    // Sleep invalidates the queue generation; wake resubmits covers and checks from a fresh generation.
+    drop_covers();
     app_comics_save_navigation(s_directory, s_page);
 }
 static bool edge_back(app_ctx_t *ctx) { (void)ctx; return s_search || s_directory[0]; }

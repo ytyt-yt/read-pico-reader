@@ -22,7 +22,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-enum { EMPTY,QUEUED,RUNNING,AUTO,READY,FAILED,TAKEN };
+enum { EMPTY,QUEUED,RUNNING,AUTO,READY,FAILED,TAKEN,CHECK_QUEUED,CHECK_READY,CHECK_FAILED };
 typedef struct { book_cover_job_t request;book_cover_result_t result;int state;bool auto_cache;uint8_t *automatic; } cover_job_slot_t;
 static cover_job_slot_t *s_jobs;
 static portMUX_TYPE s_lock=portMUX_INITIALIZER_UNLOCKED;
@@ -112,14 +112,17 @@ static void worker(void *unused) {
     for(;;){
         cover_job_slot_t job={0};int slot=-1;unsigned generation;
         portENTER_CRITICAL(&s_lock);
-        if(!s_paused&&s_jobs)for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)if(s_jobs[i].state==QUEUED){slot=(int)i;break;}
+        if(!s_paused&&s_jobs)for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)if(s_jobs[i].state==QUEUED||s_jobs[i].state==CHECK_QUEUED){slot=(int)i;break;}
         if(slot<0){s_running=false;portEXIT_CRITICAL(&s_lock);break;}
         job=s_jobs[slot];s_jobs[slot].automatic=NULL;s_jobs[slot].state=RUNNING;generation=s_generation;
         portEXIT_CRITICAL(&s_lock);
-        prepare(&job,generation);
+        bool checking=job.state==CHECK_QUEUED;
+        if(checking){
+            if(current(generation))job.result.source_fingerprint=book_cover_source_fingerprint(job.request.path);
+        }else prepare(&job,generation);
         portENTER_CRITICAL(&s_lock);
         if(!s_paused&&generation==s_generation){
-            s_jobs[slot].auto_cache=job.auto_cache;s_jobs[slot].result=job.result;s_jobs[slot].state=job.result.pixels?(job.state==AUTO?AUTO:READY):FAILED;
+            s_jobs[slot].auto_cache=job.auto_cache;s_jobs[slot].result=job.result;s_jobs[slot].state=checking?CHECK_READY:job.result.pixels?(job.state==AUTO?AUTO:READY):FAILED;
             job.result.pixels=NULL;
         }
         portEXIT_CRITICAL(&s_lock);
@@ -129,13 +132,14 @@ static void worker(void *unused) {
 }
 static void start_worker(void) {
     portENTER_CRITICAL(&s_lock);bool queued=false;
-    if(s_jobs)for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)queued|=s_jobs[i].state==QUEUED;
+    if(s_jobs)for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)queued|=s_jobs[i].state==QUEUED||s_jobs[i].state==CHECK_QUEUED;
     bool start=queued&&!s_running&&!s_paused;if(start)s_running=true;portEXIT_CRITICAL(&s_lock);
     if(start&&xTaskCreate(worker,"covers",12288,NULL,1,NULL)!=pdPASS){
         uint8_t *old[BOOK_COVER_JOB_SLOTS]={0};
         portENTER_CRITICAL(&s_lock);s_running=false;
-        for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)if(s_jobs[i].state==QUEUED){
-            old[i]=s_jobs[i].automatic;s_jobs[i].automatic=NULL;s_jobs[i].state=FAILED;
+        for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)if(s_jobs[i].state==QUEUED||s_jobs[i].state==CHECK_QUEUED){
+            old[i]=s_jobs[i].automatic;s_jobs[i].automatic=NULL;
+            s_jobs[i].state=s_jobs[i].state==CHECK_QUEUED?CHECK_FAILED:FAILED;
         }
         portEXIT_CRITICAL(&s_lock);
         for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)free(old[i]);
@@ -178,7 +182,8 @@ int book_cover_jobs_take(unsigned generation,unsigned slot,book_cover_result_t *
     if(generation!=s_generation||s_paused)status=-1;
     else if(s_jobs[slot].state==READY){*result=s_jobs[slot].result;s_jobs[slot].result.pixels=NULL;s_jobs[slot].state=TAKEN;status=1;}
     else if(s_jobs[slot].state==AUTO){automatic=s_jobs[slot];s_jobs[slot].result.pixels=NULL;s_jobs[slot].state=RUNNING;}
-    else if(s_jobs[slot].state==FAILED||s_jobs[slot].state==TAKEN)status=-1;
+    else if(s_jobs[slot].state==FAILED){*result=s_jobs[slot].result;status=-1;}
+    else if(s_jobs[slot].state==TAKEN)status=-1;
     portEXIT_CRITICAL(&s_lock);
     if(automatic.result.pixels){
         char canonical[256];const char *title=automatic.request.title;
@@ -191,6 +196,21 @@ int book_cover_jobs_take(unsigned generation,unsigned slot,book_cover_result_t *
         }
         portEXIT_CRITICAL(&s_lock);free(automatic.result.pixels);start_worker();
     }
+    return status;
+}
+int book_cover_jobs_recheck(unsigned generation,unsigned slot,uint64_t *fingerprint) {
+    if(!s_jobs||slot>=BOOK_COVER_JOB_SLOTS||!fingerprint)return -1;
+    bool media_ready=read_pico_sd_io_ready();int status=0;
+    portENTER_CRITICAL(&s_lock);
+    cover_job_slot_t *job=&s_jobs[slot];
+    if(generation!=s_generation||s_paused||job->state==EMPTY||
+       (!media_ready&&!strncmp(job->request.path,"/sdcard/",8)))status=-1;
+    else if(job->state==CHECK_READY){
+        *fingerprint=job->result.source_fingerprint;job->state=TAKEN;status=1;
+    }else if(job->state==CHECK_FAILED){job->state=TAKEN;status=-1;}
+    else if(job->state==TAKEN||job->state==FAILED)job->state=CHECK_QUEUED;
+    portEXIT_CRITICAL(&s_lock);
+    if(!status)start_worker();
     return status;
 }
 void book_cover_jobs_cancel(unsigned generation) {

@@ -18,6 +18,8 @@ python3 tools/test_comics_catalog.py
 python3 tools/comics_navigation_host_test.py
 python3 tools/comics_reader_host_test.py
 python3 tools/comics_ui_host_test.py
+python3 tools/cover_jobs_host_test.py
+python3 tools/reader_chapter_jump_host_test.py
 python3 tools/reader_fullscreen_host_test.py
 python3 tools/book_ui_host_test.py
 python3 tools/test_book_toc.py

@@ -137,7 +137,7 @@ esp_err_t book_comics_scan(const char *directory,book_comic_catalog_t *out){
   e->chapters=24;
  }return ESP_OK;
 }
-uint64_t book_cover_source_fingerprint(const char *path){(void)path;return fingerprint;}
+uint64_t book_cover_source_fingerprint(const char *path){(void)path;assert(!"UI fingerprint IO");return 0;}
 bool book_cover_load_gray(const char *path,const char *title,const char *author,uint8_t out[BOOK_COVER_W * BOOK_COVER_H],bool allow,bool *pending){(void)path;(void)title;(void)author;*pending=!allow;if(!allow)return false;++cover_loads;memset(out,55,176*240);return true;}
 bool book_cover_fast_cache_read(const char *p,const char *t,const char *a,book_fast_cover_key_t key,uint8_t *out,bool *edge){(void)p;(void)t;(void)a;(void)key;(void)out;(void)edge;return false;}
 void book_cover_fast_cache_write(const char *p,const char *t,const char *a,book_fast_cover_key_t key,const uint8_t *out,bool edge){(void)p;(void)t;(void)a;(void)key;(void)out;(void)edge;}
@@ -145,12 +145,19 @@ void book_cover_fast_cache_write(const char *p,const char *t,const char *a,book_
 unit += r"""
 static book_cover_job_t job_requests[9];
 static int completed_jobs;
-static unsigned job_generation;
-unsigned book_cover_jobs_begin(void){completed_jobs=0;return ++job_generation;}
-void book_cover_jobs_cancel(unsigned generation){(void)generation;completed_jobs=0;}
-bool book_cover_jobs_submit(unsigned generation,unsigned slot,const book_cover_job_t *request){assert(generation==job_generation&&slot<9);job_requests[slot]=*request;return true;}
+static unsigned job_generation,check_requests;
+static bool checks_pending[9],checks_complete;
+unsigned book_cover_jobs_begin(void){completed_jobs=0;memset(checks_pending,0,sizeof(checks_pending));return ++job_generation;}
+void book_cover_jobs_cancel(unsigned generation){if(generation==job_generation){++job_generation;completed_jobs=0;}memset(checks_pending,0,sizeof(checks_pending));}
+bool book_cover_jobs_submit(unsigned generation,unsigned slot,const book_cover_job_t *request){assert(slot<9);if(generation!=job_generation)return false;job_requests[slot]=*request;return true;}
+int book_cover_jobs_recheck(unsigned generation,unsigned slot,uint64_t *out){
+ assert(slot<9);if(generation!=job_generation)return -1;
+ if(!checks_pending[slot]){checks_pending[slot]=true;++check_requests;return 0;}
+ if(!checks_complete)return 0;
+ checks_pending[slot]=false;*out=fingerprint;return 1;
+}
 int book_cover_jobs_take(unsigned generation,unsigned slot,book_cover_result_t *result){
- assert(generation==job_generation&&slot<9);if(oom)return -1;if(slot>=(unsigned)completed_jobs)return 0;
+ assert(generation==job_generation&&slot<9);if(oom){result->source_fingerprint=fingerprint;return -1;}if(slot>=(unsigned)completed_jobs)return 0;
  book_cover_job_t *q=&job_requests[slot];size_t bytes=q->fast?q->stride*q->height:176u*240u;
  uint8_t *pixels=malloc(bytes);assert(pixels);++cover_loads;memset(pixels,55,bytes);
  *result=(book_cover_result_t){.pixels=pixels,.fast=q->fast,.source_fingerprint=fingerprint};return 1;
@@ -210,6 +217,22 @@ int main(void){uint8_t frame[1];app_ctx_t ctx={.fb=frame,.now_ms=1000};
  oom=true;assert(prepare(true));assert(ready());drop_covers();oom=false;
  media_lost(&ctx);assert(!s_directory[0]&&!s_catalog.entries&&!s_catalog.count&&s_message[0]);
  mounted=false;scan();assert(!count()&&s_message[0]);mounted=true;media_ready(&ctx);ctx.now_ms+=3000;assert(tick(&ctx)==APP_REDRAW_PAGE&&count()==12);
+ // 加载中锁屏后模拟队列睡眠失效，不重新进入页面也应完成封面。/ Lock mid-load, invalidate for sleep, then finish without re-entering.
+ assert(!prepare(false));completed_jobs=1;assert(!prepare(true)&&s_covers[0].ready);
+ unsigned sleeping_generation=s_cover_generation;before_lock(&ctx);book_cover_jobs_cancel(job_generation);
+ assert(!s_cover_generation&&!s_cover_checks&&!s_covers[0].ready);
+ assert(tick(&ctx)==APP_REDRAW_NONE&&s_cover_generation!=sleeping_generation);
+ completed_jobs=9;assert(tick(&ctx)==APP_REDRAW_PAGE&&ready());
+ unsigned before_checks=check_requests,before_loads=cover_loads;
+ ctx.now_ms+=2100;assert(tick(&ctx)==APP_REDRAW_NONE&&s_cover_checks);
+ assert(check_requests==before_checks+4&&cover_loads==before_loads);
+ for(int poll=0;poll<100;++poll)assert(tick(&ctx)==APP_REDRAW_NONE&&cover_loads==before_loads);
+ checks_complete=true;assert(tick(&ctx)==APP_REDRAW_NONE&&!s_cover_checks&&ready());
+ ++fingerprint;ctx.now_ms+=2100;assert(tick(&ctx)==APP_REDRAW_NONE&&s_cover_checks);
+ assert(tick(&ctx)==APP_REDRAW_PAGE&&!s_cover_checks&&!s_cover_generation&&!ready());
+ assert(tick(&ctx)==APP_REDRAW_NONE);completed_jobs=9;assert(tick(&ctx)==APP_REDRAW_PAGE&&ready());
+ ctx.now_ms+=2100;checks_complete=false;assert(tick(&ctx)==APP_REDRAW_NONE&&s_cover_checks);
+ assert(turn(1)==APP_REDRAW_PAGE&&!s_cover_checks);assert(tick(&ctx)==APP_REDRAW_NONE&&!ready());
  app_comics_cover_mode_changed();assert(!s_covers[0].gray&&!s_covers[0].bits);comics_on_exit(&ctx);
  app_comics_request_chapters("",0,"");on_enter(&ctx);app_redraw_t redraw;
  unsigned loaded=cover_loads;

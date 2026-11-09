@@ -29,6 +29,9 @@ bool book_cover_jobs_submit(unsigned generation,unsigned slot,const book_cover_j
 /// 0待处理，1完成并转交像素所有权，-1失败；无封面时仅在UI生成字形。
 /// 0 pending,1 transfers pixels,-1 failed; missing artwork renders its glyphs only on the UI thread.
 int book_cover_jobs_take(unsigned generation,unsigned slot,book_cover_result_t *result);
+/// 后台复查已收取槽位的来源：0排队/等待，1返回指纹，-1不可用；不执行UI文件访问。
+/// Recheck a consumed slot in the worker: 0 queues/waits, 1 returns its fingerprint, -1 unavailable; no UI file IO.
+int book_cover_jobs_recheck(unsigned generation,unsigned slot,uint64_t *fingerprint);
 void book_cover_jobs_cancel(unsigned generation);
 /// 仅卸载/睡眠前收齐文件句柄，导航不等待。/ Join handles only before unmount/sleep; navigation never waits.
 bool book_cover_jobs_quiesce(unsigned timeout_ms);

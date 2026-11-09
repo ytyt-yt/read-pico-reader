@@ -417,7 +417,7 @@ static char s_chapter_jump_digits[24];
 static bool s_chapter_jump_replace, s_chapter_jump_error;
 static struct {
     bool valid;
-    size_t chapter, offset;
+    size_t chapter, offset, image_page;
     int64_t until_ms;
 } s_chapter_jump_undo;
 // 微调长按只更新预览，松手后统一重排和保存；离开控件即取消。
@@ -3040,6 +3040,14 @@ static void draw_font_recovery(uint8_t *fb) {
 // Drawing and hit testing share geometry with space around keys, actions and the bottom edge.
 #define READER_STATS_TOP 586
 #define READER_JUMP_TOP 518
+// CBZ的内部章节就是图片页；文字书仍采用当前章节的排版页。
+// Internal CBZ chapters are image pages; text books retain the current chapter's layout pages.
+static size_t reader_chapter_jump_count(void) {
+    return book_kind() == BOOK_KIND_CBZ ? book_chapter_count() : book_layout_page_count();
+}
+static size_t reader_chapter_jump_current(void) {
+    return book_kind() == BOOK_KIND_CBZ ? s_chapter : s_page;
+}
 static EpdRect reader_stats_control_rect(int control) {
     if (control == 1) return (EpdRect){32, READER_STATS_TOP + 25, 64, 64};
     if (control == 2) return (EpdRect){54, READER_STATS_TOP + 348, 74, 72};
@@ -3097,7 +3105,7 @@ static void draw_reader_stats(uint8_t* fb) {
     ui_hairline(fb, top + 276, 36, 612, 0xb0);
     ui_text_box(fb,(EpdRect){54,top+292,190,38},23,"本章跳转",EPD_DRAW_ALIGN_LEFT,false);
     ui_text_box(fb,(EpdRect){258,top+292,372,38},19,s_title,EPD_DRAW_ALIGN_RIGHT,false);
-    size_t count = book_layout_page_count();
+    size_t count = reader_chapter_jump_count();
     size_t draft = count ? (s_chapter_jump_page < count ? s_chapter_jump_page : count - 1) : 0;
     EpdRect stepper = {54, top + 348, 402, 72};
     ui_fill_round_rect(fb, stepper, 36, 0xe8); ui_draw_control_frame(fb, stepper, 36, 0x78);
@@ -3112,7 +3120,7 @@ static void draw_reader_stats(uint8_t* fb) {
     ui_fill_round_rect(fb,jump,36,UI_GRAY_BLACK);
     ui_text_box(fb,jump,24,"跳转",EPD_DRAW_ALIGN_CENTER,true);
     char hint[96];
-    snprintf(hint,sizeof(hint),"当前第 %u 页，点按数字可输入页码",count ? (unsigned)s_page + 1 : 0);
+    snprintf(hint,sizeof(hint),"当前第 %u 页，点按数字可输入页码",count ? (unsigned)reader_chapter_jump_current() + 1 : 0);
     ui_text_box(fb,(EpdRect){54,top+432,576,34},18,hint,EPD_DRAW_ALIGN_LEFT,false);
     for (int i = 6; i <= 7; ++i) {
         EpdRect rect=reader_stats_control_rect(i);
@@ -3127,7 +3135,7 @@ static void draw_reader_chapter_jump(uint8_t *fb) {
     const int top=READER_JUMP_TOP;
     draw_sheet(fb,top,"跳转到本章");
     char caption[160];
-    snprintf(caption,sizeof(caption),"%s · 共 %u 页",s_title,(unsigned)book_layout_page_count());
+    snprintf(caption,sizeof(caption),"%s · 共 %u 页",s_title,(unsigned)reader_chapter_jump_count());
     ui_text_box(fb,(EpdRect){54,top+85,576,36},20,caption,EPD_DRAW_ALIGN_CENTER,false);
     EpdRect input={54,top+138,576,78};
     ui_fill_round_rect(fb,input,18,UI_GRAY_WHITE);ui_draw_control_frame(fb,input,18,0x58);
@@ -3135,7 +3143,7 @@ static void draw_reader_chapter_jump(uint8_t *fb) {
     ui_text_box(fb,(EpdRect){550,top+138,60,78},23,"页",EPD_DRAW_ALIGN_CENTER,false);
     ui_text_box(fb,(EpdRect){142,top+138,400,78},36,s_chapter_jump_digits,EPD_DRAW_ALIGN_CENTER,false);
     char error[80]={0};
-    if(s_chapter_jump_error)snprintf(error,sizeof(error),"请输入 1—%u 之间的页码",(unsigned)book_layout_page_count());
+    if(s_chapter_jump_error)snprintf(error,sizeof(error),"请输入 1—%u 之间的页码",(unsigned)reader_chapter_jump_count());
     ui_text_box(fb,(EpdRect){54,top+224,576,34},18,error,EPD_DRAW_ALIGN_CENTER,false);
     const char *keys[]={"1","2","3","4","5","6","7","8","9","清空","0","退格","取消","跳转"};
     for(int i=0;i<14;++i){
@@ -7008,8 +7016,9 @@ static app_redraw_t reading_settings_action(app_ctx_t *ctx, uint16_t x, uint16_t
 }
 
 static void reader_chapter_jump_begin(void) {
-    size_t count=book_layout_page_count();
-    s_chapter_jump_page=count ? (s_page<count?s_page:count-1) : 0;
+    size_t count=reader_chapter_jump_count();
+    size_t current=reader_chapter_jump_current();
+    s_chapter_jump_page=count ? (current<count?current:count-1) : 0;
     s_chapter_jump_error=false;
     s_reader_panel=READER_PANEL_STATS;
 }
@@ -7022,29 +7031,42 @@ static bool reader_chapter_jump_parse(size_t *page) {
         if(value>(SIZE_MAX-digit)/10)return false;
         value=value*10+digit;
     }
-    if(!value||value>book_layout_page_count())return false;
+    if(!value||value>reader_chapter_jump_count())return false;
     *page=value-1;
     return true;
 }
 static app_redraw_t reader_chapter_jump_commit(app_ctx_t *ctx,size_t page,bool restore) {
-    if(!s_text||s_view!=READING||!book_layout_page_count())return APP_REDRAW_NONE;
+    if(!s_text||s_view!=READING||!reader_chapter_jump_count())return APP_REDRAW_NONE;
+    bool comic=book_kind()==BOOK_KIND_CBZ;
     size_t offset=SIZE_MAX;
     if(restore){
         if(!s_chapter_jump_undo.valid||s_chapter_jump_undo.chapter!=s_chapter||ctx->now_ms>=s_chapter_jump_undo.until_ms)
             return APP_REDRAW_NONE;
         offset=s_chapter_jump_undo.offset;
-        page=book_layout_page_for_offset(offset);
+        page=comic?s_chapter_jump_undo.image_page:book_layout_page_for_offset(offset);
     }
-    if(page>=book_layout_page_count())return APP_REDRAW_NONE;
-    lock_draw();
-    invalidate_prep();
-    size_t before=reader_page_offset(s_page);
-    size_t destination=offset==SIZE_MAX?book_layout_page_start_offset(page):offset;
-    bool changed=page!=s_page||destination!=before;
-    s_chapter_jump_undo.valid=!restore&&changed;
-    s_chapter_jump_undo.chapter=s_chapter;s_chapter_jump_undo.offset=before;
+    if(page>=reader_chapter_jump_count())return APP_REDRAW_NONE;
+    bool changed;
+    if(comic){
+        size_t before=s_chapter;
+        changed=page!=before;
+        if(changed&&!load_chapter(ctx,page,0,false))return APP_REDRAW_PAGE;
+        s_comic_direction=page>=before?1:-1;
+        lock_draw();
+        invalidate_prep();
+        s_chapter_jump_undo.valid=!restore&&changed;
+        s_chapter_jump_undo.chapter=s_chapter;s_chapter_jump_undo.image_page=before;
+    }else{
+        lock_draw();
+        invalidate_prep();
+        size_t before=reader_page_offset(s_page);
+        size_t destination=offset==SIZE_MAX?book_layout_page_start_offset(page):offset;
+        changed=page!=s_page||destination!=before;
+        s_chapter_jump_undo.valid=!restore&&changed;
+        s_chapter_jump_undo.chapter=s_chapter;s_chapter_jump_undo.offset=before;
+        s_page=page;s_jump_page=page;s_jump_offset=offset;
+    }
     s_chapter_jump_undo.until_ms=ctx->now_ms+7000;
-    s_page=page;s_jump_page=page;s_jump_offset=offset;
     s_reader_panel=READER_PANEL_NONE;s_reader_slider=-1;
     s_reader_tap.pending=false;
     s_water_turn_pending=s_reader_turn_pending=s_reader_text_frame=false;
@@ -7053,14 +7075,14 @@ static app_redraw_t reader_chapter_jump_commit(app_ctx_t *ctx,size_t page,bool r
 #endif
     s_reader_footer_pending=s_reader_image_refresh_pending=s_reader_cleanup=false;
     unlock_draw();
-    release_page_images();prepare_inline_image();
+    if(!comic){release_page_images();prepare_inline_image();}
     if(changed)save_progress();
     s_stats_activity_ms=ctx->now_ms;ctx->user_activity=true;
     return APP_REDRAW_PAGE;
 }
 static app_redraw_t reader_chapter_jump_action(app_ctx_t *ctx,uint16_t x,uint16_t y) {
     int control=reader_chapter_jump_hit(x,y);
-    size_t count=book_layout_page_count();
+    size_t count=reader_chapter_jump_count();
     if(s_reader_panel==READER_PANEL_STATS){
         if(control==0||control==1){s_reader_panel=READER_PANEL_NONE;invalidate_prep();return APP_REDRAW_PAGE;}
         if(control==6){

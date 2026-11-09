@@ -32,6 +32,7 @@ static bool read_pico_sd_io_ready(void){return media_ready_for_jobs;}
 static int jobs,decodes,fonts,writes,reads,mode,fail_alloc,task_ok=1,worker_context;
 static unsigned replaced;
 static uint64_t fingerprint;
+static unsigned fingerprint_reads;
 static size_t live,largest;
 static struct{void *p;size_t n;} memory[64];
 static void *heap_caps_malloc(size_t n,int caps){assert(caps==3);if(fail_alloc)return NULL;void *p=malloc(n);if(!p)return NULL;for(unsigned i=0;i<64;++i)if(!memory[i].p){memory[i].p=p;memory[i].n=n;live+=n;if(n>largest)largest=n;return p;}abort();}
@@ -45,7 +46,7 @@ static int xTaskCreate(void(*fn)(void *),const char *name,int stack,void *arg,in
 static void vTaskDelete(void *arg){(void)arg;longjmp(done,1);}
 static void vTaskDelay(int ms){mono+=ms*1000;}
 static int64_t esp_timer_get_time(void){return mono;}
-uint64_t book_cover_source_fingerprint(const char *p){(void)p;return fingerprint;}
+uint64_t book_cover_source_fingerprint(const char *p){(void)p;assert(worker_context);++fingerprint_reads;return fingerprint;}
 static int mock_stat(const char *p,struct stat *st){assert(worker_context);++reads;if(*p=='X')return -1;memset(st,0,sizeof(*st));st->st_mode=*p=='D'?S_IFDIR:S_IFREG;st->st_size=100;st->st_mtime=200;return 0;}
 #define stat(p,s) mock_stat(p,s)
 static book_cover_job_t request(const char *p){book_cover_job_t q={.width=164,.height=214,.stride=21,.contrast=100};strcpy(q.path,p);strcpy(q.title,"title");return q;}
@@ -109,7 +110,34 @@ int main(void){
  assert(book_cover_jobs_take(generation,0,&result)==1&&result.pixels[0]=='D'&&result.source_fingerprint==71);free(result.pixels);
  generation=book_cover_jobs_begin();q=request("D");mode=3;
  assert(book_cover_jobs_submit(generation,0,&q));run();assert(book_cover_jobs_take(generation,0,&result)==-1);
- assert(book_cover_jobs_quiesce(0));free(s_jobs);s_jobs=NULL;assert(!live);
+ generation=book_cover_jobs_begin();q=request("D");fingerprint=91;
+ assert(book_cover_jobs_submit(generation,0,&q));run();
+ assert(book_cover_jobs_take(generation,0,&result)==1);free(result.pixels);
+ uint64_t checked=0;unsigned before_checks=fingerprint_reads;before=decodes;old_writes=writes;
+ assert(book_cover_jobs_recheck(generation,0,&checked)==0&&fingerprint_reads==before_checks);
+ assert(book_cover_jobs_recheck(generation,0,&checked)==0&&fingerprint_reads==before_checks);
+ run();assert(book_cover_jobs_recheck(generation,0,&checked)==1&&checked==91);
+ assert(fingerprint_reads==before_checks+1&&decodes==before&&writes==old_writes);
+ fingerprint=92;assert(book_cover_jobs_recheck(generation,0,&checked)==0);run();
+ assert(book_cover_jobs_recheck(generation,0,&checked)==1&&checked==92);
+ assert(book_cover_jobs_recheck(generation,0,&checked)==0);
+ book_cover_jobs_cancel(generation);run();
+ assert(book_cover_jobs_recheck(generation,0,&checked)==-1);
+ generation=book_cover_jobs_begin();q=request("N");q.artwork_only=true;
+ assert(book_cover_jobs_submit(generation,0,&q));run();result=(book_cover_result_t){0};
+ assert(book_cover_jobs_take(generation,0,&result)==-1&&result.source_fingerprint==92);
+ assert(book_cover_jobs_recheck(generation,0,&checked)==0);run();
+ assert(book_cover_jobs_recheck(generation,0,&checked)==1&&checked==92);
+ task_ok=0;assert(book_cover_jobs_recheck(generation,0,&checked)==0);
+ assert(book_cover_jobs_recheck(generation,0,&checked)==-1);task_ok=1;
+ generation=book_cover_jobs_begin();q=request("/sdcard/comics/a");
+ assert(book_cover_jobs_submit(generation,0,&q));run();assert(book_cover_jobs_take(generation,0,&result)==1);free(result.pixels);
+ media_ready_for_jobs=false;before_checks=fingerprint_reads;
+ assert(book_cover_jobs_recheck(generation,0,&checked)==-1&&fingerprint_reads==before_checks);
+ media_ready_for_jobs=true;assert(book_cover_jobs_recheck(generation,0,&checked)==0);
+ assert(!book_cover_jobs_quiesce(0));run();assert(book_cover_jobs_quiesce(0));
+ assert(book_cover_jobs_recheck(generation,0,&checked)==-1);
+ free(s_jobs);s_jobs=NULL;assert(!live);
  puts("PASS: real bounded cover worker has no UI IO on queue/poll, packed hits skip gray/decode, stale generations and media cancellation discard results, UI-only auto glyphs, transient fallback not cached, all9 slots and OOM/task failures release resources");
 }
 '''

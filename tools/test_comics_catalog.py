@@ -14,6 +14,7 @@ from home_cover_cache_host_test import function
 ROOT = Path(__file__).resolve().parents[1]
 COVER = ROOT / "main/book/book_cover.c"
 source = COVER.read_text()
+METALIO = "static metalio_cover_key_t ram_key(" in source
 unit = r'''
 #include <assert.h>
 #include <ctype.h>
@@ -30,6 +31,7 @@ unit = r'''
 #include <png.h>
 #include "book_comics.h"
 #include "book_cover.h"
+#include "metalio_cover_cache.h"
 #include "book_progress.h"
 #include "esp_heap_caps.h"
 static const char *root;
@@ -77,9 +79,13 @@ unit += source[source.index("#define COVER_CACHE_MAGIC"):source.index("static ui
 for name in ("cover_hash", "book_cover_source_fingerprint", "prepared_comic_cover", "cover_cache_key",
              "cover_cache_read", "cover_cache_write", "book_cover_load_gray_impl", "book_cover_load_gray"):
     unit += function(name, COVER) + "\n"
+    if METALIO and name == "cover_cache_key":
+        unit += function("ram_key", COVER) + "\n"
 unit += source[source.index("#define FAST_COVER_REVISION"):source.index("static uint64_t fast_cover_checksum")]
 for name in ("fast_cover_checksum", "fast_cover_key", "book_cover_fast_cache_read", "fast_cache_write", "book_cover_fast_cache_write"):
     unit += function(name, COVER) + "\n"
+    if METALIO and name == "fast_cover_key":
+        unit += function("finished_fast_ram_key", COVER) + "\n"
 unit += r'''
 static void replace_cover(const char *fixture,const char *destination){
  char p[288];snprintf(p,sizeof(p),"/sdcard/%s",fixture);FILE *in=fopen(p,"rb"),*out=fopen(destination,"wb");assert(in&&out);
@@ -122,6 +128,10 @@ int main(int argc,char **argv){
  puts("PASS: real two-level catalog, natural order, hidden/nested/empty filtering, recent progress, OOM, prepared pixels without archive reads, fallback and gray/BW cache invalidation");
 }
 '''
+# S31测试执行实际RAM缓存；结束时释放缓存，不借用Pico的磁盘专用实现。
+# S31 tests exercise and release the real RAM cache rather than borrowing Pico's disk-only implementation.
+if METALIO:
+    unit = unit.replace(' puts("PASS:', ' metalio_cover_cache_clear();\n puts("PASS:')
 with tempfile.TemporaryDirectory(prefix="comics-catalog-", dir=ROOT / "build") as temp:
     work = Path(temp)
     long_name = "漫画" * 35
@@ -152,5 +162,5 @@ with tempfile.TemporaryDirectory(prefix="comics-catalog-", dir=ROOT / "build") a
     (work / "test.c").write_text(unit)
     subprocess.run(["cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-fsanitize=address,undefined",
                     "-I" + str(ROOT / "tools/book_epub_stubs"), "-I" + str(ROOT / "main/book"),
-                    str(work / "test.c"), *flags, "-o", str(work / "test")], check=True)
+                    str(work / "test.c"), *([str(ROOT / "main/book/metalio_cover_cache.c"), "-pthread"] if METALIO else []), *flags, "-o", str(work / "test")], check=True)
     subprocess.run([str(work / "test"), str(work)], check=True)

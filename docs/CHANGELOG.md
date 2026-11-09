@@ -2,6 +2,8 @@
 
 ## 本地测试 / Local test — 2026-11-09
 
+- 修复漫画封面在浅睡唤醒后停留占位图、CBZ内页码跳转被拒绝，以及封面定时核对阻塞界面；双板支持图片页跳转及返回原位置，封面指纹核对在后台执行。
+  Fix comic covers stalled after shallow wake, rejected page jumps within CBZ files and UI stalls during periodic cover checks. Both boards support image-page jumps and undo, with cover fingerprints checked in the background.
 - 漫画适配当前Pico/S31双板构建，WebP复用共享解码器并保留可取消灰阶预解码。
   Comics support the current Pico/S31 builds, sharing one WebP decoder with cancellable grayscale predecode.
 - 漫画书架新增液态玻璃样式，阅读沿用默认全屏偏好、当前缩放和本板刷新范围，页脚显示CBZ内页码。

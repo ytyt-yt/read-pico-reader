@@ -51,6 +51,8 @@ static size_t book_navigation_position(size_t ch,size_t p){(void)ch;(void)p;retu
 static int book_toc_open(size_t p){return (int)p/BOOK_TOC_ROWS;}
 static const char *s_text="comic";
 static bool s_clear_confirm,s_reader_text_frame,s_reader_body_frame=true,s_reader_turn_pending;
+static bool s_reader_image_frame __attribute__((unused)),s_reader_image_exit_pending __attribute__((unused));
+static int s_turn_direction __attribute__((unused));
 static bool s_water_turn_pending,s_reader_cleanup,s_save_failed;
 static bool s_reader_fullscreen=true;
 #define s_toolbar (s_reader_panel!=READER_PANEL_NONE)
