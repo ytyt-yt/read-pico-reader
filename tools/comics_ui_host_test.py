@@ -11,13 +11,16 @@ from home_cover_cache_host_test import function
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "main/apps/app_comics.c").read_text()
-unit = r'''
+keyboard_top = next(line for line in (ROOT / "main/ui/ui_keyboard.h").read_text().splitlines()
+                    if line.startswith("#define UI_SYSTEM_KEYBOARD_TOP "))
+unit = keyboard_top + r'''
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "ui_locale_format.h"
 #include "book_comics.h"
 #include "book_cover.h"
 #include "book_cover_jobs.h"
@@ -51,6 +54,8 @@ static bool mounted=true,probe,oom,fast,invalid_directory;
 static unsigned revision=1,cover_draws,list_draws,cover_loads,gray_pixels,commits;
 static unsigned header_labels,pager_labels,pager_icons,old_rules,area_pushes,pressed_headers;
 static EpdRect pushed_area;
+static char drawn_title[256],drawn_detail[256],drawn_progress[288],drawn_name[256],drawn_pager[64],drawn_info[288];
+static unsigned keyboard_draws,keyboard_updates,keyboard_presses,keyboard_taps;
 static uint8_t setting_style=2;
 static uint64_t fingerprint=1;
 static char opened_path[288],saved_directory[288];
@@ -89,8 +94,10 @@ static void ui_nav_back(uint8_t *fb,int x,int y){(void)fb;(void)x;(void)y;}
 static void ui_nav_draw(uint8_t *fb,int id){(void)fb;assert(id==5);}
 static void ui_text(uint8_t *fb,int x,int y,int px,const char *s,int align,bool inverse){
  (void)fb;(void)s;(void)align;(void)inverse;
+ if((x==36||x==112)&&y==90)strcpy(drawn_title,s);
+ if(x<220&&y==449)strcpy(drawn_info,s);
  if((x==490||x==599)&&(y==121||y==123)){assert(px==20);++header_labels;}
- if(x==342&&y==1031){assert(px==21);++pager_labels;}
+ if(x==342&&y==1031){assert(px==21);++pager_labels;strcpy(drawn_pager,s);}
 }
 #define ui_text_vc ui_text
 static void ui_text_box(uint8_t *fb,EpdRect r,int px,const char *text,int align,bool wrap){ui_text(fb,r.x+r.width/2,r.y+r.height/2,px,text,align,wrap);}
@@ -99,7 +106,7 @@ static void ui_draw_round_rect(uint8_t *fb,EpdRect r,int radius,int gray){(void)
 #define ui_fill_round_rect ui_draw_round_rect
 #define ui_draw_control_frame ui_draw_round_rect
 static void ui_shelf_cover_pixels(uint8_t *fb,EpdRect image,const uint8_t *gray,unsigned w,unsigned h,const uint8_t *bits,bool is_fast){(void)fb;(void)image;(void)w;(void)h;(void)is_fast;assert(gray||bits);++cover_draws;}
-static void ui_shelf_list_details(uint8_t *fb,int row,const char *name,const char *detail,unsigned pct,const char *label){(void)fb;(void)row;(void)name;(void)detail;(void)pct;(void)label;++list_draws;}
+static void ui_shelf_list_details(uint8_t *fb,int row,const char *name,const char *detail,unsigned pct,const char *label){(void)fb;(void)pct;++list_draws;if(!row){strcpy(drawn_name,name);strcpy(drawn_detail,detail);strcpy(drawn_progress,label);}}
 static void ui_shelf_furniture(uint8_t *fb,int style,bool is_fast){(void)fb;(void)style;(void)is_fast;}
 typedef int ui_icon_t;
 enum {UI_ICON_PAGER_CHEVRON_FIRST,UI_ICON_CHEVRON_LEFT,UI_ICON_CHEVRON_RIGHT,UI_ICON_PAGER_CHEVRON_LAST};
@@ -113,11 +120,11 @@ static void ui_keyboard_begin(ui_text_edit_t *edit,bool ascii){(void)edit;(void)
 static void ui_keyboard_end(void){}
 static bool ui_keyboard_release(void){return true;}
 static bool ui_keyboard_pending(void){return false;}
-static void ui_keyboard_draw(uint8_t *fb,int top){(void)fb;(void)top;}
-static bool ui_keyboard_press(int x,int y,int top,int64_t ms){(void)x;(void)y;(void)top;(void)ms;return true;}
-static ui_keyboard_result_t ui_keyboard_tap(int x,int y,int top,int64_t ms){(void)x;(void)y;(void)top;(void)ms;return UI_KEYBOARD_CHANGED;}
+static void ui_keyboard_draw(uint8_t *fb,int top){(void)fb;assert(top==UI_SYSTEM_KEYBOARD_TOP);++keyboard_draws;}
+static bool ui_keyboard_press(int x,int y,int top,int64_t ms){(void)x;(void)y;(void)ms;assert(top==UI_SYSTEM_KEYBOARD_TOP);++keyboard_presses;return true;}
+static ui_keyboard_result_t ui_keyboard_tap(int x,int y,int top,int64_t ms){(void)ms;assert(top==UI_SYSTEM_KEYBOARD_TOP);++keyboard_taps;return x>=534&&y>=top+430&&y<top+502?UI_KEYBOARD_DONE:UI_KEYBOARD_CHANGED;}
 static ui_keyboard_result_t ui_keyboard_idle_tick(bool touch,int64_t ms){(void)touch;(void)ms;return UI_KEYBOARD_NONE;}
-static ui_keyboard_update_t ui_keyboard_update(uint8_t *fb,int top,EpdRect field,int px,bool masked,void *suffix,bool force){(void)fb;(void)top;(void)px;(void)masked;(void)suffix;(void)force;return (ui_keyboard_update_t){.area=field};}
+static ui_keyboard_update_t ui_keyboard_update(uint8_t *fb,int top,EpdRect field,int px,bool masked,void *suffix,bool force){(void)fb;(void)px;(void)masked;(void)suffix;(void)force;assert(top==UI_SYSTEM_KEYBOARD_TOP);++keyboard_updates;return (ui_keyboard_update_t){.area=field};}
 static void ui_text_input_draw(uint8_t *fb,ui_text_edit_t *edit,EpdRect r,int px,bool masked,void *suffix){(void)fb;(void)edit;(void)r;(void)px;(void)masked;(void)suffix;}
 static bool ui_text_input_tap(ui_text_edit_t *edit,EpdRect r,int px,bool masked,void *suffix,int x,int y){(void)edit;(void)px;(void)masked;(void)suffix;return ui_rect_hit(r,x,y);}
 static int E0470_FOLLOW_WAVEFORM,E0470_WAVEFORM;
@@ -172,6 +179,19 @@ for name in ("ui_shelf_rows", "ui_shelf_row", "ui_shelf_image", "ui_shelf_lift",
 unit += function("ui_nav_hit", ROOT / "main/ui/ui_nav.c") + "\n"
 unit += SOURCE[SOURCE.index("static book_comic_catalog_t s_catalog;"):SOURCE.index("const app_desc_t app_comics =")]
 unit += r'''
+// 测试仅把固件存储视为只读，用户目录、标题和输入缓冲均保留RAM身份。
+// Keep firmware storage readonly in the fixture while preserving RAM identity for user folders, titles and input.
+static char mutable_name[64]="漫画";
+bool ui_locale_test_readonly(const void *text){
+ uintptr_t at=(uintptr_t)text;
+#define USER_BUFFER(value) if(at>=(uintptr_t)(value)&&at-(uintptr_t)(value)<sizeof(value))return false
+ USER_BUFFER(mutable_name);USER_BUFFER(s_directory);USER_BUFFER(s_requested_directory);
+ USER_BUFFER(s_message);USER_BUFFER(s_requested_message);USER_BUFFER(s_query);USER_BUFFER(s_root_query);USER_BUFFER(s_draft);
+ USER_BUFFER(job_requests);
+#undef USER_BUFFER
+ if(s_catalog.entries&&at>=(uintptr_t)s_catalog.entries&&at-(uintptr_t)s_catalog.entries<s_catalog.count*sizeof(*s_catalog.entries))return false;
+ return true;
+}
 static app_redraw_t tap(app_ctx_t *ctx,int x,int y){ui_gesture_event_t e={.type=UI_GESTURE_TAP,.x0=x,.y0=y,.x=x,.y=y};return gesture(ctx,&e);}
 int main(void){uint8_t frame[1];app_ctx_t ctx={.fb=frame,.now_ms=1000};
  for(int style=1;style<=6;++style){if(style!=1&&style!=2&&style!=5&&style!=6)continue;setting_style=style;
@@ -245,15 +265,57 @@ int main(void){uint8_t frame[1];app_ctx_t ctx={.fb=frame,.now_ms=1000};
  assert(main_key(&ctx,UI_KEY_2,&redraw)&&!s_key_mode);
  s_search=true;assert(!main_key(&ctx,UI_KEY_2,&redraw)&&edge_back(&ctx));
  ui_gesture_event_t swipe={.y0=700};assert(!back_swipe_area(&ctx,&swipe));swipe.y0=400;assert(back_swipe_area(&ctx,&swipe));
+ swipe.y0=UI_SYSTEM_KEYBOARD_TOP;assert(!back_swipe_area(&ctx,&swipe));--swipe.y0;assert(back_swipe_area(&ctx,&swipe));
+ render(&ctx,frame);assert(keyboard_draws);
+ // 底排按下和抬起交给键盘，不能命中常驻导航；四条键盘调用路径共用同一位置。
+ // Bottom-row presses/releases belong to the keyboard, not persistent navigation; all four call paths share placement.
+ unsigned before_updates=keyboard_updates;
+ const int bottom_x[]={300,480,600};
+ for(unsigned i=0;i<3;++i){int x=bottom_x[i],y=UI_SYSTEM_KEYBOARD_TOP+501;
+  assert(ui_nav_hit(x,y)==-1);
+  ui_gesture_event_t press={.type=UI_GESTURE_PRESS,.x0=x,.y0=y,.x=x,.y=y};
+  assert(gesture(&ctx,&press)==APP_REDRAW_AREA&&s_search);
+  app_redraw_t result=tap(&ctx,x,y);assert(result==(i==2?APP_REDRAW_PAGE:APP_REDRAW_AREA));
+ }
+ assert(!s_search&&keyboard_presses==3&&keyboard_taps==3&&keyboard_updates>before_updates);
  comics_on_exit(&ctx);
- puts("PASS: actual comic browser, shared main header/pager and exact hits, local header press/cancel, four shared styles in gray/BW, grouped covers, layer search, paging, return pages, shallow state, deep checkpoint, invalid directory, OOM and media cleanup");
+ // 真实翻译器先处理固件格式和复制；与文案同名的用户目录、文件名和输入不能被翻译。
+ // Translate firmware formats/copies with the real locale while preserving matching user folder/file names and input.
+ for(int english=0;english<2;++english){
+  ui_locale_set_english(english);setting_style=5;app_comics_request_chapters("",0,"");on_enter(&ctx);
+  strcpy(s_catalog.entries[0].name,"漫画");strcpy(s_catalog.entries[0].latest,"搜索");
+  render(&ctx,frame);
+  assert(!strcmp(drawn_title,english?"Comics":"漫画")&&!strcmp(drawn_name,"漫画"));
+  assert(!strcmp(drawn_detail,english?"24 chapters":"24 章"));
+  assert(!strcmp(drawn_progress,english?"Latest: 搜索":"最近：搜索"));
+  assert(strstr(drawn_pager,english?"12 comics":"12部漫画"));
+  s_style=2;render(&ctx,frame);assert(!strcmp(drawn_info,english?"24 chapters · 搜索":"24 章 · 搜索"));
+  s_style=5;app_comics_request_chapters("/sdcard/comics/漫画",0,"");on_enter(&ctx);
+  strcpy(s_catalog.entries[0].name,"刷新");s_catalog.entries[0].has_progress=true;s_catalog.entries[0].pct=37;
+  render(&ctx,frame);assert(!strcmp(drawn_title,"漫画")&&!strcmp(drawn_name,"刷新"));
+  assert(!strcmp(drawn_detail,english?"Chapter progress":"章节进度"));
+  assert(!strcmp(drawn_progress,english?"Read 37%":"已读 37%"));
+  assert(strstr(drawn_pager,english?"24 chapter":"24章"));
+  s_catalog.entries[0].has_progress=false;render(&ctx,frame);
+  assert(!strcmp(drawn_progress,english?"Not started · 37%":"未开始 · 37%"));
+  invalid_directory=true;scan();invalid_directory=false;
+  assert(!strcmp(s_message,english?"Comic folder unavailable; returned to Comics":"漫画目录已失效，已返回漫画书架"));
+  mounted=false;scan();mounted=true;
+  assert(!strcmp(s_message,english?"TF card unavailable; remount it":"TF 卡不可用，请重新挂载"));
+  copy(s_draft,sizeof(s_draft),mutable_name);assert(!strcmp(s_draft,"漫画"));
+  app_comics_request_chapters("",0,mutable_name);on_enter(&ctx);assert(!strcmp(s_message,"漫画"));
+  comics_on_exit(&ctx);
+ }
+ ui_locale_set_english(false);
+ puts("PASS: actual comic browser, keyboard/nav separation, bilingual labels/counts/progress/notices with user data preserved, shared header/pager, four gray/BW styles, grouped covers, search, return pages, sleep and media cleanup");
 }
 '''
 with tempfile.TemporaryDirectory(prefix="comics-ui-", dir=ROOT / "build") as folder:
     work = Path(folder)
     (work / "test.c").write_text(unit)
     subprocess.run(["cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", "-Wno-unused-variable",
-                    "-fsanitize=address,undefined", "-I" + str(ROOT / "tools/book_epub_stubs"),
+                    "-fsanitize=address,undefined", "-DKIIKO_LOCALE_TEST=1",
+                    "-I" + str(ROOT / "components/kiiko_locale/include"), "-I" + str(ROOT / "tools/book_epub_stubs"),
                     "-I" + str(ROOT / "main/book"), "-I" + str(ROOT / "main/ui"),
-                    str(work / "test.c"), "-o", str(work / "test")], check=True)
+                    str(work / "test.c"), str(ROOT / "components/kiiko_locale/ui_locale.c"), "-o", str(work / "test")], check=True)
     subprocess.run([str(work / "test")], check=True)

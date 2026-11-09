@@ -2,6 +2,8 @@
 
 ## 本地测试 / Local test — 2026-11-09
 
+- 修复漫画搜索键盘与底部导航重叠，补齐漫画界面中英翻译；章节数量、进度及提示先翻译再格式化，漫画名、文件名与输入保留原文。
+  Keep comic search keys above bottom navigation and complete bilingual comic labels, counts, progress and notices while preserving user names, filenames and input.
 - 修复漫画封面在浅睡唤醒后停留占位图、CBZ内页码跳转被拒绝，以及封面定时核对阻塞界面；双板支持图片页跳转及返回原位置，封面指纹核对在后台执行。
   Fix comic covers stalled after shallow wake, rejected page jumps within CBZ files and UI stalls during periodic cover checks. Both boards support image-page jumps and undo, with cover fingerprints checked in the background.
 - 漫画适配当前Pico/S31双板构建，WebP复用共享解码器并保留可取消灰阶预解码。

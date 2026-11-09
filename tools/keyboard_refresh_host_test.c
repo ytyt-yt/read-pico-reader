@@ -43,7 +43,8 @@ static void repaint(bool force){
   if(fb[y*WIDTH+x]!=reference[y*WIDTH+x]){fprintf(stderr,"stale input pixel at %d,%d: %u vs %u\n",x,y,fb[y*WIDTH+x],reference[y*WIDTH+x]);abort();}
   if(fb[y*WIDTH+x]!=previous[y*WIDTH+x])assert(ui_rect_hit(update.area,x,y));
  }
- if(update.area.width)updates++;if(update.layout)layouts++;
+ if(update.area.width)updates++;
+ if(update.layout)layouts++;
  last_update=update;
  if(update.settle){
   assert(!update.field&&!update.layout&&update.area.x==24&&update.area.y==612&&update.area.width==636&&update.area.height==114);
@@ -69,7 +70,8 @@ int main(void){
  assert(ui_text_input_tap(&edit,field,28,false,NULL,550,285));repaint(true);
  begin(false);
  const char *digits="64426";for(const char *p=digits;*p;p++){int i=*p-'1';key(120+(i%3)*150,742+(i/3)*78);}
- if(ui_keyboard_page(1))repaint(false);if(ui_keyboard_page(-1))repaint(false);
+ if(ui_keyboard_page(1))repaint(false);
+ if(ui_keyboard_page(-1))repaint(false);
  key(88,685);key(220,580);key(26,742);key(600,900);key(30,580);
  key(580,820);key(590,900);key(480,1000);key(480,1000);
  // 九宫格到英文全键盘、数字页返回和拒绝英文九宫格，都不能留下旧按键。

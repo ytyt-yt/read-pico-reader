@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "ui_locale_format.h"
 
 static book_comic_catalog_t s_catalog;
 static char s_directory[BOOK_STORE_PATH_MAX], s_requested_directory[BOOK_STORE_PATH_MAX];
@@ -58,6 +59,7 @@ static struct {
 } s_covers[9];
 
 static void copy(char *dst, size_t cap, const char *src) {
+    src = ui_tr(src);
     size_t n = strlen(src);
     if (n >= cap) { n = cap - 1; while (n && ((unsigned char)src[n] & 0xc0) == 0x80) --n; }
     memcpy(dst, src, n); dst[n] = 0;
@@ -186,7 +188,7 @@ static void draw_cover(uint8_t *fb, int row) {
 }
 static EpdRect field(void) { return (EpdRect){36, 200, 612, 88}; }
 static app_redraw_t input_update(app_ctx_t *ctx, bool force) {
-    ui_keyboard_update_t update = ui_keyboard_update(ctx->fb, 610, field(), UI_PX_BODY, false, NULL, force);
+    ui_keyboard_update_t update = ui_keyboard_update(ctx->fb, UI_SYSTEM_KEYBOARD_TOP, field(), UI_PX_BODY, false, NULL, force);
     if (!update.area.width) return APP_REDRAW_NONE;
     s_area = update.area; s_feedback = true; s_feedback_mode = update.layout ? MODE_GL16 : MODE_DU;
     return APP_REDRAW_AREA;
@@ -198,7 +200,7 @@ static void draw_header_button(uint8_t *fb, int slot) {
 static void draw_pager(uint8_t *fb) {
     int pressed = s_key_pressed ? (s_key_pressed < 0 ? UI_PAGER_PREVIOUS : UI_PAGER_NEXT) : UI_PAGER_NONE;
     if (s_pressed >= 23 && s_pressed <= 26) pressed = s_pressed - 23;
-    ui_shelf_pager_state(fb, (int)count(), s_page, pages(), s_directory[0] ? "章" : "部漫画", s_key_mode, pressed);
+    ui_shelf_pager_state(fb, (int)count(), s_page, pages(), ui_tr(s_directory[0] ? "章" : "部漫画"), s_key_mode, pressed);
 }
 static void render(app_ctx_t *ctx, uint8_t *fb) {
     (void)ctx; ui_clear_page(fb); ui_text_set_system_scale(true);
@@ -209,7 +211,7 @@ static void render(app_ctx_t *ctx, uint8_t *fb) {
         ui_text_input_draw(fb, &s_input, field(), UI_PX_BODY, false, NULL);
         ui_draw_button(fb, (EpdRect){36,392,180,66}, "清空", false);
         ui_draw_button(fb, (EpdRect){468,392,180,66}, "应用搜索", false);
-        ui_keyboard_draw(fb, 610); ui_nav_draw(fb, UI_NAV_COMICS); return;
+        ui_keyboard_draw(fb, UI_SYSTEM_KEYBOARD_TOP); ui_nav_draw(fb, UI_NAV_COMICS); return;
     }
     if (s_directory[0]) ui_nav_back(fb, 36, 79);
     char title[256]; copy(title, sizeof(title), s_directory[0] ? strrchr(s_directory, '/') + 1 : "漫画");
@@ -334,7 +336,7 @@ static void finish_search(void) {
 }
 static app_redraw_t gesture(app_ctx_t *ctx, const ui_gesture_event_t *ev) {
     if (s_search) {
-        if (ev->type == UI_GESTURE_PRESS && ui_keyboard_press(ev->x0, ev->y0, 610, ctx->now_ms)) return input_update(ctx, false);
+        if (ev->type == UI_GESTURE_PRESS && ui_keyboard_press(ev->x0, ev->y0, UI_SYSTEM_KEYBOARD_TOP, ctx->now_ms)) return input_update(ctx, false);
         if (ev->type == UI_GESTURE_CANCEL || ev->type == UI_GESTURE_MOVE) {
             if (ui_keyboard_release()) return input_update(ctx, false);
             return APP_REDRAW_NONE;
@@ -350,7 +352,7 @@ static app_redraw_t gesture(app_ctx_t *ctx, const ui_gesture_event_t *ev) {
             if (!ui_keyboard_pending()) { finish_search(); return APP_REDRAW_PAGE; }
             return input_update(ctx, false);
         }
-        ui_keyboard_result_t result = ui_keyboard_tap(ev->x, ev->y, 610, ctx->now_ms);
+        ui_keyboard_result_t result = ui_keyboard_tap(ev->x, ev->y, UI_SYSTEM_KEYBOARD_TOP, ctx->now_ms);
         if (result == UI_KEYBOARD_DONE && !ui_keyboard_pending()) { finish_search(); return APP_REDRAW_PAGE; }
         return input_update(ctx, false);
     }
@@ -465,7 +467,7 @@ static void before_lock(app_ctx_t *ctx) {
 }
 static bool edge_back(app_ctx_t *ctx) { (void)ctx; return s_search || s_directory[0]; }
 static bool back_swipe_area(app_ctx_t *ctx, const ui_gesture_event_t *event) {
-    (void)ctx; return !s_search || event->y0 < 610;
+    (void)ctx; return !s_search || event->y0 < UI_SYSTEM_KEYBOARD_TOP;
 }
 static bool main_visible(app_ctx_t *ctx) { (void)ctx; return !s_search; }
 static EpdRect area_hint(app_ctx_t *ctx) { (void)ctx; return s_area; }
