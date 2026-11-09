@@ -17,3 +17,5 @@ void app_home_cover_mode_changed(void);
 bool app_book_volume_key(app_ctx_t *ctx, int direction, app_redraw_t *redraw);
 bool app_book_ai_bookmark(void);
 #endif
+static inline bool app_comics_resume_context(char *path,size_t capacity){(void)path;(void)capacity;return false;}
+static inline void app_comics_cover_mode_changed(void){}

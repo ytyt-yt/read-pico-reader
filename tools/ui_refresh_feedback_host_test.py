@@ -41,27 +41,72 @@ shelf = r'''
 #include <string.h>
 #include <stddef.h>
 typedef struct {int x,y,width,height;} EpdRect;
-typedef struct {void *hl;uint8_t *fb;int64_t now_ms;unsigned leaf;void *request_app;} app_ctx_t;
+/* SPDX-License-Identifier: LicenseRef-Kiikoread-Personal-Study-1.0
+ * 中文：标准显示状态栏、返回/书名/收藏及底部工具栏；非沉浸全屏只保留状态及章节进度，沉浸全屏保留铺屏细线。
+ * English: Standard shows status, Back/title/Favorite and bottom tools; nonimmersive fullscreen retains status/chapter progress and immersive fullscreen retains a thin line.
+ */
+enum { UI_READER_STANDARD_TOP=176, UI_READER_STANDARD_BOTTOM=1048,
+       UI_READER_METADATA_TOP=80, UI_READER_METADATA_BOTTOM=1168,
+       UI_READER_FULLSCREEN_TOP=0, UI_READER_FULLSCREEN_BOTTOM=1204,
+       UI_READER_FOOTER_TEXT_Y=1180, UI_READER_FOOTER_TEXT_PX=21,
+       UI_READER_HEADER_TEXT_PX=25, UI_READER_TOOLS_TOP=1096 };
+static inline EpdRect ui_reader_area(bool fullscreen,bool immersive) {
+    int top=!fullscreen?UI_READER_STANDARD_TOP:immersive?UI_READER_FULLSCREEN_TOP:UI_READER_METADATA_TOP;
+    int bottom=!fullscreen?UI_READER_STANDARD_BOTTOM:immersive?UI_READER_FULLSCREEN_BOTTOM:UI_READER_METADATA_BOTTOM;
+    return (EpdRect){0,top,684,bottom-top};
+}
+static inline EpdRect ui_reader_body(bool fullscreen,bool immersive,int margin,bool vertical) {
+    // 工具栏及题头悬浮在正文上；显隐只改变可见/刷新范围，不改变排版。
+    // Header/tools overlay the body; visibility changes the paint crop, never pagination.
+    (void)fullscreen;
+    EpdRect r=ui_reader_area(true,immersive);
+    // 正式版正文上留24像素、下留2像素；横竖排继续使用用户边距。
+    // Retain the release's24px top and2px bottom text inset, with configured horizontal/vertical margins.
+    if(immersive){r.y+=24;r.height-=26;}
+    if(vertical)return (EpdRect){24,r.y+margin,636,r.height-2*margin};
+    return (EpdRect){margin,r.y,684-2*margin,r.height};
+}
+static inline EpdRect ui_reader_header(void){return (EpdRect){0,0,684,UI_READER_METADATA_TOP};}
+static inline EpdRect ui_reader_back_control(void){return (EpdRect){32,80,64,64};}
+static inline EpdRect ui_reader_favorite_control(void){return (EpdRect){584,80,64,70};}
+static inline EpdRect ui_reader_footer(void){return (EpdRect){0,1168,684,48};}
+static inline EpdRect ui_reader_progress(void){return (EpdRect){18,1194,648,6};}
+static inline EpdRect ui_reader_fullscreen_footer(void){return (EpdRect){0,1204,684,12};}
+static inline EpdRect ui_reader_fullscreen_progress(void){return (EpdRect){36,1207,612,3};}
+static inline EpdRect ui_reader_footer_for(bool fullscreen,bool immersive){return !fullscreen?(EpdRect){0,UI_READER_STANDARD_BOTTOM,684,48}:immersive?ui_reader_fullscreen_footer():ui_reader_footer();}
+_Static_assert(UI_READER_METADATA_BOTTOM+48==1216,"Reader metadata stays on screen");
+_Static_assert(UI_READER_FULLSCREEN_BOTTOM+12==1216,"Fullscreen keeps only the release progress strip");
+
+_Static_assert(UI_READER_STANDARD_BOTTOM+48==UI_READER_TOOLS_TOP,"Standard metadata fits above the tools");
+typedef struct {void *hl;uint8_t *fb;int64_t now_ms;unsigned leaf;const void *request_app;} app_ctx_t;
 typedef enum {APP_REDRAW_NONE,APP_REDRAW_DONE,APP_REDRAW_AREA,APP_REDRAW_PAGE,APP_REDRAW_FULL} app_redraw_t;
-enum {SHELF,MANAGE,READING,READER_PANEL_NONE,TOC,EDIT,SEARCH};
+enum {SHELF,MANAGE,READING,READER_PANEL_NONE,TOC,EDIT,SEARCH,READER_PANEL_BACKGROUND_PREVIEW,BULK};
 enum EpdDrawMode {MODE_GL16,MODE_DU,MODE_GC16};
 enum EpdDrawError {EPD_DRAW_SUCCESS,EPD_DRAW_ERROR};
 #define APP_PAGE_REFRESH_MODE MODE_GL16
+#define UI_LOCK_WIDTH 684
+#define UI_LOCK_HEIGHT 1216
+#define UI_BAR_TOP 1096
+#define UI_BAR_H 96
+#define READER_FULLSCREEN_PROGRESS_TOP (UI_LOCK_HEIGHT - 12)
 #define SHELF_BOOK_LIFT_PX 16
 #define portMAX_DELAY 0
 static const int E0470_WAVEFORM=0,E0470_FULL_WAVEFORM=1,E0470_FOLLOW_WAVEFORM=2,E0470_TEXTTURN_WAVEFORM=3,E0470_SOFT_TEXTTURN_WAVEFORM=4;
-static const int* display_reader_text_waveform(void){return &E0470_SOFT_TEXTTURN_WAVEFORM;}
+
 static const char *TAG="test";
 static int s_view,s_presented_view,s_reader_panel,s_pressed_control,s_reader_slider;
 static bool s_shelf_page_pending,s_shelf_feedback_pending,s_reader_cleanup,s_reader_image_refresh_pending,s_toolbar,s_clear_confirm;
-static bool s_reader_fullscreen,s_water_turn_pending,s_reader_footer_pending,s_reader_turn_pending,s_reader_text_frame;
+static bool s_reader_fullscreen,s_water_turn_pending,s_reader_footer_pending,s_reader_turn_pending,s_reader_text_frame,s_reader_body_frame;
+static void book_comic_cache_pause(void){}
+static bool test_background;
 static enum EpdDrawMode s_mode;
 static EpdRect s_area,s_du_area;
 static unsigned s_du_count;
 static int64_t s_du_ms;
 static int s_water_turn_dir;
-static void *s_prep_done;
+
 static void display_main_transition_shelf_page(void){}
+static void display_main_transition_cancel(void){}
 static unsigned pushes;
 static int route;
 static enum EpdDrawMode pushed_mode;
@@ -74,7 +119,22 @@ static int test_style;static bool test_fast;
 static int app_settings_shelf_style(void){return test_style;}
 static bool app_settings_main_fast_refresh(void){return test_fast;}
 static int shelf_rows(void){return test_style==5?4:9;}
-static bool s_reader_clock_pending,s_cover_batch_present_pending;
+static bool s_reader_clock_pending,s_cover_batch_present_pending,s_shelf_key_paint_pending;
+static bool reader_indent_present(app_ctx_t *ctx,app_redraw_t redraw){(void)ctx;(void)redraw;return false;}
+static void gather_cover_entry(app_ctx_t *ctx){(void)ctx;}
+static void reader_prefetch_end(bool started){(void)started;}
+
+static bool __attribute__((unused)) s_zoom_active;
+static int __attribute__((unused)) s_image_zoom;
+#define READER_IMAGE_ZOOM_MIN 1000
+static void __attribute__((unused)) continuous_du_reset(void){}
+static void reader_zoom_reset(void){}
+static int book_toc_open(size_t chapter){return (int)chapter;}
+static size_t current_toc_position(void);
+enum {UI_PAGER_NONE=-1,UI_PAGER_FIRST,UI_PAGER_PREVIOUS,UI_PAGER_NEXT,UI_PAGER_LAST};
+static EpdRect ui_pager_rect(int action){return(EpdRect){action==UI_PAGER_FIRST?36:576,1006,72,50};}
+static app_redraw_t shelf_key_paint(app_ctx_t *ctx){(void)ctx;return APP_REDRAW_AREA;}
+
 static int64_t s_reader_clock_minute,s_reader_clock_painted_minute;
 static unsigned s_cover_dirty_mask,s_cover_present_mask;
 static bool reader_status_visible(void){return false;}
@@ -83,7 +143,7 @@ static int64_t ui_nav_clock_minute(void){return 100;}
 static void reader_status_paint(uint8_t *fb){(void)fb;}
 static bool shelf_cover_frame_ready(void){return true;}
 #define READER_PANEL_BACKGROUND_PREVIEW 98
-static const char *app_settings_book_background_path(void){return "";}
+static const char *app_settings_book_background_path(void){return test_background?"bg.png":"";}
 static void ui_reader_background_prepare(const char *path){(void)path;}
 static unsigned test_list_draws,test_prepares;
 static EpdRect paint_list_cover_feedback(app_ctx_t *ctx,int row){(void)ctx;++test_list_draws;return (EpdRect){71,228+row*197,120,164};}
@@ -100,13 +160,18 @@ static bool kick_prep(void){return false;}
 static int64_t esp_timer_get_time(void){return 1000000;}
 static void test_log(const char *tag,const char *format,...){(void)tag;(void)format;}
 #define ESP_LOGI test_log
-static void xSemaphoreTake(void *done,int timeout){(void)done;(void)timeout;}
+
 static void guard_draw_result(void *hl,int error){(void)hl;assert(error==EPD_DRAW_SUCCESS||error==EPD_DRAW_ERROR);}
-static EpdRect reader_area(void){return (EpdRect){36,176,612,856};}
-static EpdRect progress_rect(void){return (EpdRect){36,1040,612,42};}
-static EpdRect reader_fullscreen_progress_area(void){return (EpdRect){0,1200,684,4};}
+static bool test_immersive;
+static bool app_settings_reader_immersive(void){return test_immersive;}
+static EpdRect reader_area(void);
 static unsigned percent(unsigned page){return page;}
-static unsigned s_page,s_chapter;
+static unsigned s_page,s_chapter,s_next_generation;
+static size_t current_toc_position(void){return s_chapter;}
+static int64_t s_reader_footer_due_ms;
+static unsigned book_layout_generation(void){return 1;}
+static bool reader_prefetch_resume(size_t page){(void)page;return false;}
+static void draw_reader_outer(uint8_t *fb,size_t page){(void)fb;(void)page;}
 static bool test_hide_images,test_load_failed,s_save_failed,s_input_settle;
 static int test_types[2][2],test_push_error,test_effect;
 static uint8_t test_full_pages;
@@ -119,14 +184,24 @@ static struct {uint8_t *gray;} test_image={.gray=(uint8_t*)"gray"},*s_page_image
 #define BOOK_TOC_ROWS 12
 #define E0470_TURN_RTL 1
 #define E0470_TURN_LTR -1
-#define E0470_TURN_FAST_TICK_US 14000
-static int test_tick_us=12000,test_tick_sets;
+#define E0470_TURN_FAST_TICK_US 11090
+enum {BOOK_KIND_EPUB,BOOK_KIND_CBZ};
+static bool s_comic_active;
+static size_t s_comic_index;
+static struct {size_t count;} s_comic_catalog;
+static char s_reader_notice[64];
+static int64_t s_reader_notice_until;
+static bool comic_open_chapter(app_ctx_t *ctx,size_t index,int position){(void)ctx;(void)index;(void)position;assert(false);return false;}
+static void copy_text(char *to,size_t size,const char *from){snprintf(to,size,"%s",from);}
+static int test_kind=BOOK_KIND_EPUB,s_comic_direction;
+static int book_kind(void){return test_kind;}
+static int test_tick_us=12000,test_tick_sets,test_water_dir;
 static int e0470_page_turn_tick_us(void){return test_tick_us;}
 static void e0470_page_turn_set_tick_us(int us){test_tick_us=us;++test_tick_sets;}
 static int book_layout_page_image_count(unsigned page){return !test_hide_images&&test_types[s_chapter][page]?1:0;}
 static unsigned book_layout_page_count(void){return 2;}
 static unsigned book_chapter_count(void){return 2;}
-static bool app_settings_reader_hide_images(void){return test_hide_images;}
+static bool reader_images_hidden(void){return test_hide_images&&test_kind!=BOOK_KIND_CBZ;}
 static uint8_t app_settings_reader_full_pages(void){return test_full_pages;}
 static int app_settings_reader_turn_effect(void){return test_effect;}
 static void save_progress(void){}
@@ -136,24 +211,28 @@ static void set_reader_view(int view){s_view=view;}
 static void lock_draw(void){}
 static void unlock_draw(void){}
 static void invalidate_prep(void){}
-static app_redraw_t toggle_reader_fullscreen(app_ctx_t *ctx){(void)ctx;s_reader_fullscreen=!s_reader_fullscreen;return APP_REDRAW_PAGE;}
+static __attribute__((unused)) app_redraw_t toggle_reader_fullscreen(app_ctx_t *ctx){(void)ctx;s_reader_fullscreen=!s_reader_fullscreen;return APP_REDRAW_PAGE;}
 static size_t fb_bytes(void){return 1;}
 static void draw_reader(uint8_t *fb,unsigned page){*fb=(uint8_t)page;}
 
-static EpdRect ui_rect_union(EpdRect a,EpdRect b){(void)b;return a;}
 static enum EpdDrawError record(int kind,enum EpdDrawMode mode,EpdRect area){assert(trace_count<256);trace_route[trace_count]=kind;trace_mode[trace_count]=mode;trace_area[trace_count++]=area;++pushes;route=kind;pushed_mode=mode;pushed_area=area;return (enum EpdDrawError)test_push_error;}
 static enum EpdDrawError update_display_area_diff_with(void *hl,const int *wave,enum EpdDrawMode mode,EpdRect area){(void)hl;trace_wave[trace_count]=*wave;return record(DIFF,mode,area);}
-static enum EpdDrawError update_display_area_with(void *hl,const int *wave,enum EpdDrawMode mode,EpdRect area){(void)hl;trace_wave[trace_count]=*wave;return record(AREA,mode,area);}
+static __attribute__((unused)) enum EpdDrawError update_display_area_with(void *hl,const int *wave,enum EpdDrawMode mode,EpdRect area){(void)hl;trace_wave[trace_count]=*wave;return record(AREA,mode,area);}
 static enum EpdDrawError update_display_area_full_with(void *hl,const int *wave,enum EpdDrawMode mode,EpdRect area){(void)hl;trace_wave[trace_count]=*wave;return record(LOCAL_FULL,mode,area);}
 static enum EpdDrawError update_display_with(void *hl,const int *wave,enum EpdDrawMode mode){(void)hl;(void)wave;return record(WHOLE,mode,(EpdRect){0});}
-static enum EpdDrawError update_display_reader_cleanup(void *hl,const int *wave){(void)hl;trace_wave[trace_count]=*wave;return record(READER_CLEANUP,MODE_GL16,(EpdRect){0});}
+
 static enum EpdDrawError update_display_full(void *hl){(void)hl;return record(FULL,MODE_GC16,(EpdRect){0});}
 static enum EpdDrawError update_display_fast_page(void *hl){(void)hl;return record(FAST,MODE_GL16,(EpdRect){0});}
-static enum EpdDrawError update_display_mode_diff(void *hl,enum EpdDrawMode mode){(void)hl;return record(READER,mode,(EpdRect){0});}
-static enum EpdDrawError update_display_water_turn(void *hl,EpdRect area,int dir){(void)hl;(void)dir;assert(test_tick_us==E0470_TURN_FAST_TICK_US);return record(WATER,MODE_GL16,area);}
+static __attribute__((unused)) enum EpdDrawError update_display_mode_diff(void *hl,enum EpdDrawMode mode){(void)hl;return record(READER,mode,(EpdRect){0});}
+static enum EpdDrawError update_display_water_turn(void *hl,EpdRect area,int dir){(void)hl;test_water_dir=dir;assert(test_tick_us==E0470_TURN_FAST_TICK_US);return record(WATER,MODE_GL16,area);}
 '''
+shelf += 'static const int *display_reader_soft_turn_waveform(void){return &E0470_SOFT_TEXTTURN_WAVEFORM;}\nstatic const int *display_main_gray_waveform(void){return &E0470_SOFT_TEXTTURN_WAVEFORM;}\nstatic const int *display_main_normal_waveform(void){return &E0470_WAVEFORM;}\nstatic enum EpdDrawError update_display_image_turn(void *hl,EpdRect r,int dir){return update_display_water_turn(hl,r,dir);}'
+shelf += 'static enum EpdDrawError update_display_text_turn(void *hl,EpdRect r,int dir){(void)dir;return update_display_area_diff_with(hl,&E0470_TEXTTURN_WAVEFORM,MODE_GL16,r);}'
 shelf += function("main/apps/app_book.c", "paint_control") + "\n"
-for name in ("present", "paint_reading", "reader_turn_chrome", "turn_page"):
+for name in ("clip_refresh_rect", "ui_rect_union"):
+    shelf += function("main/ui/ui_kit.c", name) + "\n"
+for name in ("reader_area",
+             "present_water_turn", "present", "paint_reading", "reader_turn_chrome", "turn_page"):
     shelf += function("main/apps/app_book.c", name) + "\n"
 shelf += r'''
 int main(void){
@@ -195,9 +274,9 @@ int main(void){
  test_style=0;test_fast=false;
  puts("PASS: 160 list bounces/settles use cover-only differentials and reuse caches; gray/fast modes retain their waveforms and navigation");
  s_reader_fullscreen=false;assert(paint_control(&ctx,(EpdRect){500,90,90,54})==APP_REDRAW_AREA&&!s_shelf_feedback_pending);
- assert(present(&ctx,APP_REDRAW_AREA)&&route==AREA&&pushed_mode==MODE_DU);
+ assert(present(&ctx,APP_REDRAW_AREA)&&route==DIFF&&pushed_mode==MODE_DU);
  assert(paint_control(&ctx,row_rect(0))==APP_REDRAW_AREA);s_view=READING;
- assert(present(&ctx,APP_REDRAW_AREA)&&route==READER&&!s_shelf_feedback_pending);
+ assert(present(&ctx,APP_REDRAW_AREA)&&route==DIFF&&!s_shelf_feedback_pending);
  s_view=s_presented_view=SHELF;paint_control(&ctx,row_rect(0));
  assert(present(&ctx,APP_REDRAW_FULL)&&route==FULL&&pushed_mode==MODE_GC16&&!s_shelf_feedback_pending);
  puts("PASS: 80 cover lift/cancel feedbacks use one grayscale differential, preserve the union and never force cleanup; buttons, view transitions and manual refresh retain their paths");
@@ -206,39 +285,46 @@ int main(void){
  s_view=s_presented_view=READING;s_text="text";s_reader_panel=READER_PANEL_NONE;
  s_area=reader_area();s_mode=MODE_GL16;s_reader_turn_pending=s_reader_footer_pending=true;
  trace_count=0;assert(present(&ctx,APP_REDRAW_AREA));
- assert(trace_count==2&&trace_route[0]==DIFF&&trace_mode[0]==MODE_GL16&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM);
+ assert(trace_count==1&&trace_route[0]==LOCAL_FULL&&trace_mode[0]==MODE_GL16&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM);
  assert(trace_area[0].y==reader_area().y&&trace_area[0].height==reader_area().height);
- assert(trace_route[1]==AREA&&trace_mode[1]==MODE_DU&&trace_wave[1]==E0470_FOLLOW_WAVEFORM);
- assert(trace_area[1].y==progress_rect().y&&!s_reader_turn_pending);
+ assert(!s_reader_turn_pending);
  for(int full=0;full<2;++full){
    s_reader_fullscreen=full;s_reader_turn_pending=true;s_reader_cleanup=true;
    s_reader_footer_pending=!full;trace_count=0;
-   assert(present(&ctx,APP_REDRAW_AREA)&&trace_count==1&&route==READER_CLEANUP&&pushed_mode==MODE_GL16&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM);
+   assert(present(&ctx,APP_REDRAW_AREA)&&trace_count==1&&route==LOCAL_FULL&&pushed_mode==MODE_GC16&&trace_wave[0]==E0470_FULL_WAVEFORM);
    s_reader_turn_pending=true;trace_count=0;
    assert(present(&ctx,APP_REDRAW_FULL)&&trace_count==1&&route==FULL);
  }
  s_reader_fullscreen=false;s_reader_turn_pending=true;s_reader_image_refresh_pending=true;
  trace_count=0;assert(present(&ctx,APP_REDRAW_AREA));
- assert(trace_count==1&&route==AREA&&pushed_mode==MODE_GC16&&trace_wave[0]==E0470_FULL_WAVEFORM);
+ assert(trace_count==1&&route==LOCAL_FULL&&pushed_mode==MODE_GL16&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM);
  s_reader_turn_pending=s_water_turn_pending=true;trace_count=0;
  assert(present(&ctx,APP_REDRAW_AREA)&&trace_count==1&&route==WATER);
  // 翻页标志已消费，下一次设置绘制不能误走翻页差分。
  // The consumed turn flag must not affect the next settings repaint.
  s_reader_panel=99;trace_count=0;
- assert(present(&ctx,APP_REDRAW_AREA)&&trace_count==1&&route==AREA&&pushed_mode==MODE_GL16&&trace_wave[0]==E0470_WAVEFORM);
+ assert(present(&ctx,APP_REDRAW_AREA)&&trace_count==1&&route==DIFF&&pushed_mode==MODE_GL16&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM);
  s_reader_panel=READER_PANEL_NONE;s_reader_fullscreen=true;s_reader_turn_pending=true;trace_count=0;
- assert(present(&ctx,APP_REDRAW_AREA)&&trace_count==2&&trace_route[0]==DIFF&&trace_route[1]==DIFF&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM&&trace_wave[1]==E0470_WAVEFORM);
+ assert(present(&ctx,APP_REDRAW_AREA)&&trace_count==1&&trace_route[0]==LOCAL_FULL&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM);
  // 快水波仅接管实际动画输出；成功、失败及全屏都恢复主页节拍，优先级分支不改节拍。
  // Fast ripple scopes pacing to actual animation output; success, failure and full screen restore main pacing, while priority branches never change it.
- for(int full=0;full<2;++full)for(int error=0;error<2;++error){
-   s_reader_fullscreen=full;s_reader_footer_pending=false;s_water_turn_pending=true;
+ for(int full=0;full<2;++full)for(int immersive=0;immersive<2;++immersive)
+ for(int image=0;image<2;++image)for(int error=0;error<2;++error)for(int dir=-1;dir<=1;dir+=2){
+   s_reader_fullscreen=full;test_immersive=immersive;s_area=reader_area();
+   s_reader_footer_pending=!full;s_water_turn_pending=true;s_reader_image_refresh_pending=image;
+   s_water_turn_dir=dir>0?E0470_TURN_RTL:E0470_TURN_LTR;
    test_push_error=error;test_tick_us=full?19000:12000;int prior=test_tick_us,sets=test_tick_sets;
    trace_count=0;assert(present(&ctx,APP_REDRAW_AREA));
-   assert(trace_route[0]==WATER&&test_tick_us==prior&&test_tick_sets==sets+2&&!s_water_turn_pending);
+   assert(trace_count==1&&trace_route[0]==WATER&&test_tick_us==prior&&test_tick_sets==sets+2&&!s_water_turn_pending);
+   assert(test_water_dir==s_water_turn_dir);
+   assert(trace_area[0].x==0&&trace_area[0].width==684);
+   assert(trace_area[0].y==reader_area().y);
+   assert(trace_area[0].height==reader_area().height);
+   assert(s_reader_footer_pending==!error);
  }
- test_push_error=0;test_tick_us=12000;s_reader_fullscreen=false;
- for(int priority=0;priority<3;++priority){
-   s_water_turn_pending=true;s_reader_cleanup=priority==1;s_reader_image_refresh_pending=priority==2;
+ test_push_error=0;test_tick_us=12000;s_reader_fullscreen=test_immersive=false;
+ for(int priority=0;priority<2;++priority){
+   s_water_turn_pending=true;s_reader_cleanup=priority==1;s_reader_image_refresh_pending=true;
    int sets=test_tick_sets;trace_count=0;
    assert(present(&ctx,priority==0?APP_REDRAW_FULL:APP_REDRAW_AREA));
    assert(trace_route[0]!=(int)WATER&&test_tick_sets==sets&&test_tick_us==12000&&!s_water_turn_pending);
@@ -272,13 +358,12 @@ int main(void){
    assert(s_reader_text_frame==(hidden||from==0));
    app_redraw_t redraw=turn_page(&ctx,1);
    bool eligible=hidden||(from==0&&to==0);
-   assert(s_reader_fullscreen && s_reader_panel==READER_PANEL_NONE);
-   if (!full) {assert(redraw==APP_REDRAW_PAGE&&!s_reader_turn_pending);trace_count=0;present(&ctx,redraw);assert(trace_route[0]==(to&&!hidden?WHOLE:READER));continue;}
+   assert(s_reader_fullscreen==full && s_reader_panel==READER_PANEL_NONE);
    assert(redraw==APP_REDRAW_AREA&&s_reader_turn_pending==eligible);
    trace_count=0;present(&ctx,redraw);
-   if(eligible)assert(trace_route[0]==DIFF&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM);
-   else if(to)assert(trace_mode[0]==MODE_GC16&&trace_wave[0]==E0470_FULL_WAVEFORM);
-   else assert(trace_wave[0]==E0470_WAVEFORM&&trace_route[0]==(full?DIFF:AREA));
+   if(eligible)assert(trace_route[0]==LOCAL_FULL&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM);
+   else if(to)assert(trace_mode[0]==MODE_GL16&&trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM);
+   else assert(trace_wave[0]==E0470_SOFT_TEXTTURN_WAVEFORM&&trace_route[0]==DIFF);
    assert(!s_reader_turn_pending&&s_reader_text_frame==(hidden||to==0));
  }
  s_reader_fullscreen=true;test_hide_images=false;
@@ -290,20 +375,20 @@ int main(void){
    app_redraw_t redraw=turn_page(&ctx,dir);
    assert(s_chapter==(unsigned)new&&s_reader_turn_pending==(from==0&&to==0));
    trace_count=0;present(&ctx,redraw);
-   assert((trace_wave[0]!=E0470_TEXTTURN_WAVEFORM&&trace_wave[0]!=E0470_SOFT_TEXTTURN_WAVEFORM)||(from==0&&to==0));
+   assert(trace_wave[0]!=E0470_TEXTTURN_WAVEFORM||(from==0&&to==0));
  }
  // 失败推屏、面板及离开阅读会失效旧基准；下一次正常绘制后恢复。
  // Failed presents, panels and leaving reading invalidate history; a successful body restores it.
  memset(test_types,0,sizeof(test_types));s_chapter=s_page=0;
  test_push_error=EPD_DRAW_ERROR;trace_count=0;present(&ctx,paint_reading(&ctx,MODE_GL16));
- assert(!s_reader_text_frame);test_push_error=0;
+ assert(!s_reader_text_frame&&!s_reader_body_frame);test_push_error=0;
  assert(turn_page(&ctx,1)==APP_REDRAW_AREA&&!s_reader_turn_pending);
  trace_count=0;present(&ctx,APP_REDRAW_AREA);assert(s_reader_text_frame);
- s_reader_panel=99;trace_count=0;present(&ctx,APP_REDRAW_PAGE);assert(!s_reader_text_frame);
+ s_reader_panel=99;trace_count=0;present(&ctx,APP_REDRAW_PAGE);assert(!s_reader_text_frame&&!s_reader_body_frame);
  s_reader_panel=READER_PANEL_NONE;s_page=0;
  assert(turn_page(&ctx,1)==APP_REDRAW_AREA&&!s_reader_turn_pending);
  trace_count=0;present(&ctx,APP_REDRAW_AREA);assert(s_reader_text_frame);
- s_view=SHELF;trace_count=0;present(&ctx,APP_REDRAW_PAGE);assert(!s_reader_text_frame);
+ s_view=SHELF;trace_count=0;present(&ctx,APP_REDRAW_PAGE);assert(!s_reader_text_frame&&!s_reader_body_frame);
  s_view=s_presented_view=READING;s_chapter=0;s_page=1;test_load_failed=true;
  assert(turn_page(&ctx,1)==APP_REDRAW_PAGE&&!s_reader_turn_pending&&s_view==TOC);
  test_load_failed=false;s_view=s_presented_view=READING;s_page=0;
@@ -311,12 +396,40 @@ int main(void){
    s_page=0;trace_count=0;present(&ctx,paint_reading(&ctx,MODE_GL16));
    test_full_pages=policy?1:0;test_effect=policy?0:1;s_turns=0;
    app_redraw_t redraw=turn_page(&ctx,1);trace_count=0;present(&ctx,redraw);
-   assert(trace_route[0]==(policy?READER_CLEANUP:WATER));
+   assert(trace_route[0]==(policy?LOCAL_FULL:WATER));
  }
  test_full_pages=0;test_effect=0;s_page=0;test_types[0][0]=1;test_image.gray=NULL;
  trace_count=0;present(&ctx,paint_reading(&ctx,MODE_GL16));assert(!s_reader_text_frame);
  assert(turn_page(&ctx,1)==APP_REDRAW_AREA&&!s_reader_turn_pending);
  puts("PASS: 36 text/mixed/image/hidden/full-screen combinations, 18 bidirectional chapter transitions, failed image/display/load guards and actual cleanup/water turns");
+
+ // 真实图片翻页必须输出水波纹，不能在已选水波纹时偷偷回退普通GL16。
+ // Actual image turns must invoke ripple rather than silently routing the selected effect to plain GL16.
+ test_effect=1;test_hide_images=false;test_image.gray=(uint8_t*)"gray";
+ for(int kind=BOOK_KIND_EPUB;kind<=BOOK_KIND_CBZ;++kind)
+ for(int background=0;background<2;++background)
+ for(int from=0;from<3;++from)for(int to=0;to<3;++to)for(int dir=-1;dir<=1;dir+=2){
+   test_kind=kind;test_background=background;s_reader_fullscreen=true;
+   s_view=s_presented_view=READING;s_reader_panel=READER_PANEL_NONE;
+   int old=dir>0?0:1,new=1-old;
+   test_types[old][dir>0?1:0]=from;test_types[new][dir>0?0:1]=to;
+   s_chapter=old;s_page=dir>0?1:0;trace_count=0;
+   present(&ctx,paint_reading(&ctx,MODE_GL16));assert(s_reader_body_frame);
+   app_redraw_t redraw=turn_page(&ctx,dir);
+   assert(redraw==APP_REDRAW_AREA&&s_water_turn_pending&&s_chapter==(unsigned)new);
+   int prior=test_tick_us,sets=test_tick_sets;trace_count=0;
+   present(&ctx,redraw);
+   assert(trace_count==1&&trace_route[0]==WATER&&trace_mode[0]==MODE_GL16);
+   assert(trace_area[0].x==0&&trace_area[0].width==684&&trace_area[0].y==80);
+   assert(trace_area[0].height==reader_area().height);
+   assert(test_water_dir==(dir>0?E0470_TURN_RTL:E0470_TURN_LTR));
+   assert(test_tick_us==prior&&test_tick_sets==sets+2&&s_reader_body_frame&&!s_water_turn_pending);
+ }
+ test_background=false;test_kind=BOOK_KIND_EPUB;s_chapter=s_page=0;
+ test_push_error=EPD_DRAW_ERROR;trace_count=0;present(&ctx,paint_reading(&ctx,MODE_GL16));
+ assert(!s_reader_body_frame);test_push_error=0;
+ assert(turn_page(&ctx,1)==APP_REDRAW_AREA&&!s_water_turn_pending);
+ puts("PASS: 72 illustrated/text/comic/background cross-chapter turns use one body-only grayscale ripple in both directions; fullscreen/immersive/image/error cases preserve main metadata deferral, bounds and pacing; failed frames cannot start ripple");
 }
 '''
 
@@ -341,7 +454,9 @@ enum {UI_ICON_WIFI,UI_ICON_BLUETOOTH,UI_ICON_ZAP};
 typedef struct {bool time_synced;time_t unix_sec;} pmu_snapshot_t;
 typedef struct {bool network_ready;int mode;} read_pico_transfer_status_t;
 static pmu_snapshot_t pmu;
-static int pct;
+static int pct,s_power_signature;
+static void ui_status_mark_visible(uint8_t *fb){(void)fb;}
+static int power_signature(void){return 0;}
 static bool wifi,bluetooth,s_system_ttf;
 #define TTF_FONT_PATH_MAX 160
 static bool chosen_system,reading_context;
@@ -350,7 +465,7 @@ static const char *ttf_font_path(void){return reading_context?"reader.ttf":chose
 static bool ttf_font_is_builtin(void){return false;}
 static char signature[96];
 static const pmu_snapshot_t *read_pico_pmu_get(void){return &pmu;}
-static int pmu_battery_percent(const pmu_snapshot_t *snapshot){(void)snapshot;return pct;}
+static int pmu_battery_percent(const pmu_snapshot_t *snapshot){(void)snapshot;return pct<0?-1:pct>100?100:pct;}
 static bool pmu_battery_charging(const pmu_snapshot_t *snapshot){(void)snapshot;return false;}
 static void read_pico_transfer_get_status(read_pico_transfer_status_t *status){*status=(read_pico_transfer_status_t){wifi,READ_PICO_TRANSFER_MODE_STA};}
 static bool app_settings_ble_turner(void){return bluetooth;}
@@ -431,7 +546,7 @@ typedef struct {int x,y,width,height;} EpdRect;
 #define UI_NAV_TAB_ICON_PX 44
 enum {UI_CLICK_NAV};
 static void ui_click_feedback_register(uint8_t *fb,EpdRect r,int kind,ui_icon_t icon){(void)fb;(void)icon;assert(kind==UI_CLICK_NAV&&r.width==60&&r.height==60);}
-static const char *const labels[]={"首页","书架","文件管理","设置"};
+static const char *const labels[]={"首页","书架","漫画","文件管理","设置"};
 enum {APP_MAIN_REFRESH_NORMAL,APP_MAIN_REFRESH_FAST,APP_MAIN_REFRESH_WATER};
 static int main_choice;
 static int app_settings_main_refresh_mode(void){return main_choice;}
@@ -457,14 +572,15 @@ int main(void){
  uint8_t fb=0;
  for(int x=0;x<684;++x){
    assert(ui_nav_hit(x,UI_NAV_TOUCH_TOP-1)==-1);
-   for(int y=UI_NAV_TOUCH_TOP;y<1216;++y)assert(ui_nav_hit(x,y)==x/171);
+   int slot=0;while(x>=(slot+1)*UI_LOCK_WIDTH/UI_NAV_COUNT)++slot;
+   for(int y=UI_NAV_TOUCH_TOP;y<1216;++y)assert(ui_nav_hit(x,y)==ui_nav_page_at(slot));
    assert(ui_nav_hit(x,1216)==-1);
  }
  assert(ui_nav_hit(684,1141)==-1&&ui_nav_hit(UINT16_MAX,1141)==-1);
  assert(UI_NAV_TOUCH_TOP==1080&&UI_NAV_TOP==1096&&UI_NAV_REFRESH_END==1088);
- for(main_choice=0;main_choice<3;++main_choice)for(int active=0;active<4;++active){
+ for(main_choice=0;main_choice<3;++main_choice)for(int active=0;active<6;++active)if(ui_nav_page_valid(active)){
    first_ink=2000;markers=tracks=texts=guards=0;ui_nav_draw(&fb,active);
-   assert(markers==1&&texts==4&&tracks==(main_choice!=0)&&guards==1);
+   assert(markers==1&&texts==UI_NAV_COUNT&&tracks==(main_choice!=0)&&guards==1);
    // 验证真实图标掩模的第一笔，单次刷新32列对齐后不能触碰图标。
    // Check actual mask ink: the 32-column-expanded single update must not reach an icon.
    assert(first_ink>=UI_NAV_MARKER_SCAN_END);
@@ -529,7 +645,7 @@ with tempfile.TemporaryDirectory() as folder:
         source, binary = Path(folder) / (name + ".c"), Path(folder) / name
         source.write_text(unit)
         extras = [str(root / "main/ui/ui_image_dither.c")] if name == "image-bw" else []
-        subprocess.run(["cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-fsanitize=address,undefined",
+        subprocess.run(["cc", "-std=gnu11", "-O1", "-Wall", "-Wextra", "-Werror", "-fsanitize=address,undefined",
                         "-I" + str(root),
                         str(source), *extras, "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)

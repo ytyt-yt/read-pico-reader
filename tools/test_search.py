@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build/search-tests"
 BUILD.mkdir(parents=True, exist_ok=True)
 source = ROOT / "components/read_pico_search/read_pico_search.c"
-flags = ["gcc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
+flags = ["gcc", "-std=c11", "-D_DEFAULT_SOURCE", "-Wall", "-Wextra", "-Werror", "-O2",
          "-I" + str(ROOT / "components/read_pico_search/include")]
 exe = BUILD / "search-host"
 subprocess.run(flags + ["-g", "-fsanitize=address,undefined", str(ROOT / "tools/search_host_test.c"), str(source), "-o", str(exe)], check=True)

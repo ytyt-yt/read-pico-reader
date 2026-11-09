@@ -33,6 +33,8 @@ static int staged_count;
 static EpdRect difference_crop;
 static int scans, fail_at, differences, powerons;
 static int phase_hits[37];
+static bool check_progress;
+static int progress_hits[8][37];
 static int test_bands=8, test_launch_step=1;
 static int lut_builds;
 static int64_t now_us;
@@ -116,6 +118,22 @@ enum EpdDrawError epd_draw_base(EpdRect area, const uint8_t* data, EpdRect crop,
     for (int x = 0; x < WIDTH / 2; ++x)
         if (x < difference_crop.x / 2 || x >= (difference_crop.x + difference_crop.width + 1) / 2)
             assert(!columns[x]);
+    // 逐条带检查底部进度像素，确保合并区域真正执行完整37相。
+    // Observe bottom progress pixels across the width, ensuring the merged area receives all 37 phases.
+    if (check_progress) for (int b = 0; b < 8; ++b) {
+        int lx = ((rotation & 1) ? HEIGHT : WIDTH) * (2 * b + 1) / 16;
+        int ly = ((rotation & 1) ? WIDTH : HEIGHT) - 8;
+        int px = lx, py = ly;
+        if (rotation == EPD_ROT_PORTRAIT) { px = WIDTH - ly - 1; py = lx; }
+        else if (rotation == EPD_ROT_INVERTED_LANDSCAPE) { px = WIDTH - lx - 1; py = HEIGHT - ly - 1; }
+        else if (rotation == EPD_ROT_INVERTED_PORTRAIT) { px = ly; py = HEIGHT - lx - 1; }
+        if (!lines[py] || !columns[px / 2]) continue;
+        int phase = -1;
+        if (staged_lines) phase = staged_lines[py];
+        else for (int band = 0; band < staged_count; ++band)
+            if (px >= staged_x0[band] && px < staged_x1[band]) phase = staged_bands[band];
+        if (phase >= 0) ++progress_hits[b][phase];
+    }
     int tick = scans++;
     int active = 0;
     bool phase_seen[37] = {0};
@@ -205,14 +223,24 @@ int main(void) {
         assert(e0470_page_turn(&hl, reader, direction) == EPD_DRAW_SUCCESS);
         assert(scans == 44 && differences == 1);
         check_crop_baseline(reader);
-        // 全屏阅读保留状态栏时从第 80 行开始，水波纹仍要覆盖整个正文。
-        // Full-screen reading keeps the status row at y=80 while animating the remaining body.
+        // 全屏水波纹包含底部12px进度区；一次44拍更新基准，状态栏不受影响。
+        // Full-screen ripple includes the bottom 12px progress strip; one 44-tick sequence commits it without touching status.
         EpdRect fullscreen_reader = {0, 80, logical.width, logical.height - 80};
+        for (int py=0;py<HEIGHT;++py) for (int px=0;px<WIDTH;++px) {
+            int lx,ly; physical_to_logical(px,py,&lx,&ly);
+            if (ly < logical.height - 12) continue;
+            size_t i=(size_t)py*WIDTH/2+px/2;
+            int shift=(px&1)*4, gray=lx<logical.width/2?0:9;
+            front[i]=(front[i]&~(15<<shift))|(gray<<shift);
+        }
         memset(back, 0xFF, sizeof(back));
         scans = differences = 0;
+        check_progress=true; memset(progress_hits,0,sizeof(progress_hits));
         assert(e0470_page_turn(&hl, fullscreen_reader, direction) == EPD_DRAW_SUCCESS);
         assert(scans == 44 && differences == 1);
         check_crop_baseline(fullscreen_reader);
+        for(int b=0;b<8;++b)for(int p=0;p<37;++p)assert(progress_hits[b][p]==1);
+        check_progress=false;
         check_direction = true;
         memset(back, 0xFF, sizeof(back));
         scans = differences = 0;

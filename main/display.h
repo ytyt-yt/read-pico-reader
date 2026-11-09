@@ -145,6 +145,8 @@ enum EpdDrawError update_display_area_diff_with(
 enum EpdDrawError update_display_settings_list(EpdiyHighlevelState* hl,unsigned list_id,EpdRect area);
 #endif
 /// area始终为旋转后逻辑坐标，勿传物理epd_full_screen。/ area always uses rotated logical coordinates, never physical epd_full_screen.
+/// 图片沿用完整灰阶水波纹，文字保留独立柔和序列。/ Image ripple retains full gray phases; text keeps its separate soft sequence.
+enum EpdDrawError update_display_image_turn(EpdiyHighlevelState* hl, EpdRect area, e0470_turn_dir_t dir);
 /// 阅读页可选的真实错相 GL16 翻页；缺相位时回退现有 GL16，失败时恢复基准帧。
 /// 纯文字水波纹复用柔和文字灰边，8带节拍不变；缺相回退GL16，扫描失败重建真实基准。
 /// Staggered text phases retain eight-band pacing, hold unchanged grays and soften edge transients; missing phases fall back and failures rebuild the baseline.

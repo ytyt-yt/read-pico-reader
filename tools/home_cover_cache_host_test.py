@@ -43,6 +43,7 @@ typedef struct {int x,y,width,height;} EpdRect;
 
 typedef struct {int unused;} book_progress_t;
 static uint8_t *s_folder;static uint32_t s_folder_key;static bool s_folder_attempted;
+uint64_t book_cover_source_fingerprint(const char *path){(void)path;return 0;}
 static bool fast, alloc_fail, asset_allowed=true, disk_hit, corrupt_disk;
 static unsigned loads,disk_reads,disk_writes;
 static size_t psram=4*1024*1024;
@@ -62,8 +63,8 @@ static bool pico_boot_asset_allowed(const char *path){(void)path;return asset_al
 static bool app_settings_main_fast_refresh(void){return fast;}
 static uint8_t app_settings_system_contrast(void){return 100;}
 static uint8_t sample(int p){return (uint8_t)(p*19+31);}
-bool book_cover_load_gray(const char *path,const char *title,const char *author,uint8_t *out,bool decode,bool *pending){(void)path;(void)title;(void)author;assert(decode&&!pending);++loads;for(int i=0;i<176*240;++i)out[i]=sample(i);return true;}
-bool book_cover_load_list_gray(const char *p,const char *t,const char *a,uint8_t *out,bool decode,bool *pending,unsigned *width,unsigned *height){*width=176;*height=240;return book_cover_load_gray(p,t,a,out,decode,pending);}
+bool book_cover_load_gray(const char *path,const char *title,const char *author,uint8_t out[BOOK_COVER_W*BOOK_COVER_H],bool decode,bool *pending){(void)path;(void)title;(void)author;assert(decode&&!pending);++loads;for(int i=0;i<176*240;++i)out[i]=sample(i);return true;}
+bool book_cover_load_list_gray(const char *p,const char *t,const char *a,uint8_t out[BOOK_COVER_W*BOOK_COVER_H],bool decode,bool *pending,unsigned *width,unsigned *height){*width=176;*height=240;return book_cover_load_gray(p,t,a,out,decode,pending);}
 static int missing=-1, modified=-1;
 static int test_stat(const char *path,struct stat *st){int id=-1;assert(sscanf(path,"/book%d.epub",&id)==1);if(id==missing)return -1;memset(st,0,sizeof(*st));st->st_mode=S_IFREG;st->st_size=100+id;st->st_mtime=200+id+(id==modified);return 0;}
 #define stat(path,out) test_stat(path,out)
@@ -79,7 +80,8 @@ int book_cover_jobs_take(unsigned generation,unsigned slot,book_cover_result_t *
  uint8_t *gray=NULL,*bits=NULL;bool edge=false;
  book_fast_cover_key_t key={176,240,22,100,17};
  if(q->fast){bits=heap_caps_calloc(5280,1,3);if(!bits)return -1;
-  if(book_cover_fast_cache_read(q->path,q->title,q->author,key,bits,&edge))goto ready;memset(bits,0,5280);}
+  if(book_cover_fast_cache_read(q->path,q->title,q->author,key,bits,&edge))goto ready;
+  memset(bits,0,5280);}
  gray=heap_caps_malloc(42240,3);if(!gray){free(bits);return -1;}
  unsigned w,h;assert(book_cover_load_list_gray(q->path,q->title,q->author,gray,true,NULL,&w,&h));
  if(q->fast){for(unsigned y=0;y<240;++y)for(unsigned x=0;x<176;++x){int v=128+((int)gray[y*176+x]-128);v=v<0?0:v>255?255:v;
@@ -101,7 +103,7 @@ int main(void){
     for(int attempt=0;attempt<300;++attempt){
         seed();int ids[]={0,1,2,3,4,5,6};void *original[7];for(int i=0;i<7;++i)original[i]=s_cover_cache[i].pixels;
         for(int i=6;i>0;--i){rng=rng*1664525u+1013904223u;unsigned j=rng%(i+1);int t=ids[i];ids[i]=ids[j];ids[j]=t;}
-        for(int i=0;i<7;++i)book(i,ids[i]);restore_cover_cache();
+        for(int i=0;i<7;++i){book(i,ids[i]);}restore_cover_cache();
         for(int i=0;i<7;++i){assert(book_at(i)->cover==original[ids[i]]);assert(s_cover_cache[i].pixels==book_at(i)->cover);assert(!strcmp(book_at(i)->path,s_cover_cache[i].path));}
         assert(live_bytes==7u*176*240);
     }

@@ -37,4 +37,8 @@ int book_toc_page_from_percent(int percent, int pages);
 EpdRect book_toc_row_rect(int row);
 void book_toc_render(uint8_t *fb, const char *book_title, size_t chapters,
                      size_t current, int page, const char *message);
+typedef bool (*book_toc_title_fn)(size_t index, char *title, size_t capacity, void *context);
+/// 外部漫画章节目录复用同一绘制，不替换当前打开的书源。/ External comic chapters share rendering without replacing the open source.
+void book_toc_render_catalog(uint8_t *fb, const char *title, size_t count, size_t current,
+                            int page, const char *message, book_toc_title_fn get_title, void *context);
 void book_toc_render_jump(uint8_t *fb, size_t chapters, int percent);

@@ -507,18 +507,25 @@ int main(void) {
     for(int i=1;i<7;++i)present_steps[i]=true;
     mounted_steps[5]=mounted_steps[6]=true;time_step=600000;covers_busy_until=2;avatar_busy_until=3;
     first.on_media_lost=lost;first.on_media_ready=ready;
-    for(int i=0;i<7;++i)add(0,0,0,0);run();
+    for(int i=0;i<7;++i){add(0,0,0,0);}
+    run();
     assert(media_lost==1&&builtin_opens==1&&recovery_calls==1&&recovery_step==4&&media_ready==1&&font_opens==1);
     // 重挂失败时退避；上传、在线升级、USB独占时均不启动恢复。
     // Back off failed mounts; upload, OTA and exclusive USB ownership all suppress recovery.
     reset();media_test=sd_font=auto_recovery_test=true;mounted_steps[0]=true;time_step=600000;
-    for(int i=1;i<20;++i)present_steps[i]=true;first.on_media_lost=lost;
-    for(int i=0;i<12;++i)add(0,0,0,0);run();assert(media_lost==1&&recovery_calls==3);
+    for(int i=1;i<20;++i){present_steps[i]=true;}
+    first.on_media_lost=lost;
+    for(int i=0;i<12;++i){add(0,0,0,0);}
+    run();assert(media_lost==1&&recovery_calls==3);
     for(int guard=0;guard<3;++guard){
         reset();media_test=sd_font=auto_recovery_test=true;mounted_steps[0]=true;time_step=600000;
-        for(int i=1;i<8;++i)present_steps[i]=true;first.on_media_lost=lost;
-        if(guard==0)online_busy=true;if(guard==1)transfer_status.state=READ_PICO_TRANSFER_UPLOADING;if(guard==2)test_usb_active=true;
-        for(int i=0;i<8;++i)add(0,0,0,0);run();assert(!recovery_calls);
+        for(int i=1;i<8;++i){present_steps[i]=true;}
+        first.on_media_lost=lost;
+        if(guard==0)online_busy=true;
+        if(guard==1)transfer_status.state=READ_PICO_TRANSFER_UPLOADING;
+        if(guard==2)test_usb_active=true;
+        for(int i=0;i<8;++i){add(0,0,0,0);}
+        run();assert(!recovery_calls);
         if(guard==2)assert(!health_polls&&!media_lost);
     }
     puts("PASS: real loop media recovery joins consumers, restores font once, retries with backoff and respects upload/OTA/USB ownership");

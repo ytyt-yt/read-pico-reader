@@ -78,6 +78,7 @@ static bool drive_active, no_change;
 static unsigned drive_releases, release_failures;
 static int64_t now_us = 1000000;
 static const EpdWaveform *waveform_at_draw;
+static const EpdWaveform *expected_water_waveform=&reader_soft;
 static enum EpdDrawError water_result;
 static int water_calls;
 static EpdRect last_area;
@@ -90,7 +91,7 @@ enum EpdDrawError e0470_page_turn_with_waveform_compact(EpdiyHighlevelState* hl,
     e0470_turn_dir_t dir,const EpdWaveform* waveform,unsigned bands) {
     assert(ota_display_depth);
     assert(hl&&area.width>0&&dir==E0470_TURN_RTL);
-    assert(waveform==(expected_turn_bands==1?display_main_gray_waveform():&reader_soft)&&bands==expected_turn_bands);
+    assert(waveform==(expected_turn_bands==1?display_main_gray_waveform():expected_water_waveform)&&bands==expected_turn_bands);
     ++water_calls;assert(last_scan==READ_PICO_EPD_SCAN_FAST);
     assert(prefill==127);
     return water_result;
@@ -315,6 +316,27 @@ int main(void) {
     unsigned prior_pushes = blind_pushes;
     assert(display_panel_repair(NULL) == EPD_DRAW_INVALID_CROP && blind_pushes == prior_pushes);
     checking_repair = false;
+    // 图片水波纹先用完整预装余量，成功后恢复普通队列；不改变时钟。
+    // Image ripple uses full prefill headroom, restores ordinary queues on success and keeps clocks unchanged.
+    water_result = EPD_DRAW_SUCCESS;
+    for (int bulk = 0; bulk < 2; ++bulk) {
+        display_set_bulk_io(bulk != 0);
+        int prior_clocks = clocks, prior_water = water_calls;
+        assert(update_display_water_turn(&hl, (EpdRect){0, 0, 16, 16}, E0470_TURN_RTL) == EPD_DRAW_SUCCESS);
+        assert(water_calls == prior_water + 1 && clocks == prior_clocks);
+        assert(prefill == (bulk ? 127 : 32) && last_scan == READ_PICO_EPD_SCAN_FULL);
+    }
+    expected_water_waveform=&E0470_WAVEFORM;
+    for (int failure=0;failure<3;++failure) {
+        memcpy(front,target,FB_BYTES);memset(back,0x55,FB_BYTES);
+        water_calls=draws=clears=0;
+        water_result=failure==0?EPD_DRAW_SUCCESS:failure==1?EPD_DRAW_NO_PHASES_AVAILABLE:EPD_DRAW_OTHER_ERROR;
+        assert(update_display_image_turn(&hl,(EpdRect){0,0,16,16},E0470_TURN_RTL)==EPD_DRAW_SUCCESS);
+        assert(water_calls==1&&!ota_display_depth&&hl.waveform==&E0470_WAVEFORM);
+        if (failure==1) assert(draws==1&&waveform_at_draw==&E0470_WAVEFORM);
+        if (failure==2) assert(clears==1&&correct_target_at_draw);
+    }
+    expected_water_waveform=&reader_soft;
     assert(!ota_display_depth);
     // 无变化刷新刚上电也必须中性；静置和重试不能新增任何像素扫描。
     // A no-change update must release a freshly powered drive; idle and retries must add no scans.

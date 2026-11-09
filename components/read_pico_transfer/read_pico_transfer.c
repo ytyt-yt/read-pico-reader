@@ -14,6 +14,8 @@
  * Frozen: Explicit time sync reuses connected STA; only a stopped service connects briefly and releases WiFi; credentials keep the original namespace and migrate the legacy single record.
  * 已连接后仍启动临时 WiFi 会返回状态错误，因此改为按连接状态分流。
  * Starting temporary WiFi while already connected returned invalid state, so sync now routes by connection state.
+ * 用户要求 CBZ 漫画：书籍入口与管理同时识别 .cbz，沿用现有生命周期与存储限制。
+ * User requests CBZ comics: book entry/management also accept .cbz, retaining lifecycle and storage limits.
  */
 #ifdef ESP_PLATFORM
 #include "ui_locale_format.h"
@@ -103,7 +105,7 @@ static bool decode_name_limit(const char *encoded, char *out, size_t cap, unsign
     const char *ext = strrchr(out, '.');
     if (!ext || (kind == 1 ? (strcasecmp(ext, ".jpg") && strcasecmp(ext, ".jpeg") && strcasecmp(ext, ".png"))
                : kind == 2 ? (strcasecmp(ext, ".ttf") && strcasecmp(ext, ".otf"))
-                           : (strcasecmp(ext, ".txt") && strcasecmp(ext, ".epub")))) return false;
+                           : (strcasecmp(ext, ".txt") && strcasecmp(ext, ".epub") && strcasecmp(ext, ".cbz")))) return false;
     // 拒绝非规范 UTF-8、代理项与越界码点。/ Reject noncanonical UTF-8, surrogates and out-of-range code points.
     for (size_t i = 0; i < n;) {
         uint32_t cp; unsigned more; unsigned char c = (unsigned char)out[i++];
@@ -510,7 +512,7 @@ static file_result_t upload_directory_file(const char *root, const char *relativ
     }
     const char *ext = strrchr(name, '.');
     file_result_t result = changed_result(path,
-        ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt")) ? changed : NULL);
+        ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt") || !strcasecmp(ext, ".cbz")) ? changed : NULL);
     result.storage_cleanup_failed = status == TRANSFER_COMMITTED_BACKUP_RETAINED;
     return result;
 }
@@ -3557,7 +3559,7 @@ static int copy_sd_file(const char *source, const char *target, uint64_t free_by
 static void forget_sd_book(const char *path) {
     if (s_cfg.file_deleted_cb) { s_cfg.file_deleted_cb(path); return; }
     const char *ext = strrchr(path, '.');
-    if (s_cfg.file_changed_cb && ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt")))
+    if (s_cfg.file_changed_cb && ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt") || !strcasecmp(ext, ".cbz")))
         (void)s_cfg.file_changed_cb(path);
 }
 

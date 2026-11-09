@@ -38,6 +38,7 @@ unit = r'''
 #include <stdlib.h>
 #include <string.h>
 #include "html_text.h"
+#include "book_comic_cache.h"
 typedef struct {int x,y,width,height;} EpdRect;
 typedef struct {int leaf;} app_ctx_t;
 #define MALLOC_CAP_SPIRAM 1
@@ -45,6 +46,7 @@ typedef struct {int leaf;} app_ctx_t;
 #define UI_PX_CAPTION 20
 #define EPD_DRAW_ALIGN_CENTER 0
 #define BOOK_KIND_EPUB 1
+#define BOOK_KIND_CBZ 2
 #define TAG "test"
 static void test_log(const char *tag,const char *format,...){(void)tag;(void)format;}
 #define ESP_LOGW(...) test_log(__VA_ARGS__)
@@ -56,6 +58,8 @@ static reader_image_t *s_page_images;
 static int s_page_image_count;
 static size_t s_page_images_for=SIZE_MAX;
 static uint32_t s_page_images_generation;
+static size_t s_page_images_chapter=SIZE_MAX;
+static EpdRect s_page_images_band;
 static size_t s_page,s_chapter=3,s_image_count;
 static char **s_images;
 static bool hidden,locked;
@@ -93,6 +97,10 @@ static reader_heading_t reader_heading_metrics(const char *title,const char *lab
  (void)title;(void)label;(void)area;return (reader_heading_t){0};
 }
 static bool app_settings_book_vertical(void){return false;}
+static int64_t esp_timer_get_time(void){static int64_t now;return ++now*1000;}
+bool book_comic_cache_take(size_t page,unsigned w,unsigned h,book_comic_bitmap_t *out){(void)page;(void)w;(void)h;memset(out,0,sizeof(*out));return false;}
+void book_comic_cache_wait(size_t page,unsigned w,unsigned h){(void)page;(void)w;(void)h;}
+void book_comic_cache_put(book_comic_bitmap_t *image){free(image->gray);image->gray=NULL;}
 static uint32_t book_layout_generation(void){return generation;}
 static int book_layout_page_image_count(size_t page){return page==s_page?slot_count:0;}
 static int book_layout_page_image(size_t page){return page==s_page?whole_image:-1;}
@@ -125,7 +133,8 @@ static esp_err_t book_chapter_image(size_t chapter,const char *path,uint8_t **ou
 }
 static esp_err_t book_chapter_image_dimensions(size_t chapter,const char *path,unsigned *w,unsigned *h){
  assert(path);if(locked)measured_chapter=chapter;else assert(chapter==s_chapter);
- if(atoi(path)==read_failure)return ESP_FAIL;*w=60;*h=20;return ESP_OK;
+ if(atoi(path)==read_failure)return ESP_FAIL;
+ *w=60;*h=20;return ESP_OK;
 }
 static bool book_image_dimensions(const uint8_t *data,size_t len,bool png,unsigned *w,unsigned *h){
  (void)png;assert(data&&len==1);*w=60;*h=20;return true;
@@ -136,6 +145,7 @@ static bool book_image_grayscale(const uint8_t *data,size_t len,bool png,unsigne
  memset(gray,128,(size_t)w*h);return true;
 }
 static uint8_t ui_image_dither_gray(uint8_t g,int x,int y){(void)x;(void)y;assert(g==128);return g;}
+
 static void epd_draw_pixel(int x,int y,uint8_t gray,uint8_t *fb){
  (void)fb;
  assert(x>=image_band.x&&x<image_band.x+image_band.width&&gray==128);++pixels;
@@ -148,8 +158,6 @@ static void epd_draw_pixel(int x,int y,uint8_t gray,uint8_t *fb){
 static void ui_text_vc(uint8_t *fb,int x,int y,int px,const char *text,int align,bool inv){
  (void)fb;(void)align;(void)inv;assert(x>=body.x&&x<=body.x+body.width&&y-px/2>=body.y&&y+px/2<=body.y+body.height&&text);++notices;
 }
-static const char s_path[]="test";
-static void book_excerpt_offer(const char *path,uint32_t chapter,const html_text_t *text){(void)path;(void)chapter;(void)text;}
 static char *s_text;
 static blk_t *s_blocks;
 static html_run_t *s_runs;
@@ -165,13 +173,16 @@ static size_t s_text_len,s_block_count,s_selected_toc=2,s_jump_offset,s_jump_pag
 static struct {bool valid;} s_chapter_jump_undo;
 static size_t s_chapter_lead_skip;
 static unsigned s_chapter_lead_height,s_chapter_lead_row_height;
+static char s_path[288];
 static unsigned s_chapter_lead_width;
 static int s_px=10,s_view=READING;
 static char s_message[128],s_chapter_heading_title[128],s_chapter_heading_label[32],s_title[128],s_font_path[128];
 static int load_error,reflow_failures,reflows;
 static void lock_draw(void){assert(!locked);locked=true;}
 static void unlock_draw(void){assert(locked);locked=false;}
-static int book_kind(void){return 0;}
+static int source_kind;
+static int book_kind(void){return source_kind;}
+static void book_layout_set_images_visible(bool visible){(void)visible;}
 static const char *ttf_font_path(void){return "font";}
 static esp_err_t book_chapter_title(size_t chapter,char *out,size_t cap){snprintf(out,cap,"chapter%zu",chapter);return ESP_OK;}
 void html_text_free(html_text_t *text){
@@ -185,11 +196,7 @@ static esp_err_t book_chapter_load_blocks_target(size_t chapter,const char *anch
 }
 static void book_layout_set_chapter_lead(size_t skip,unsigned height){(void)skip;(void)height;}
 static void book_layout_set_chapter_lead_width(unsigned px){(void)px;}
-static void apply_chapter_lead(const char *title,const char *label,size_t skip,unsigned height){
- (void)height;
- (void)title;(void)label;s_chapter_lead_skip=skip;s_chapter_lead_height=0;s_chapter_lead_width=0;
- book_layout_set_chapter_lead(skip,0);
-}
+static void book_excerpt_offer(const char *path,size_t chapter,const html_text_t *loaded){(void)path;(void)chapter;(void)loaded;}
 static bool book_layout_build_blocks(const char *text,size_t len,const blk_t *blocks,size_t count,EpdRect r,int px){
  (void)text;(void)len;(void)blocks;(void)count;(void)r;(void)px;assert(locked);++reflows;++generation;
  if(dims_fn){assert(inline_notes==((reader_dims_ctx_t*)dims_ctx)->notes&&inline_count==((reader_dims_ctx_t*)dims_ctx)->note_count);int w=0,h=0;assert(dims_fn(dims_ctx,0,&w,&h)&&w==60&&h==20);}
@@ -218,8 +225,16 @@ static void draw_zoomed_image(uint8_t *fb,EpdRect band,int scale,int cx,int cy,b
  (void)fb;(void)band;(void)scale;(void)cx;(void)cy;(void)bw;assert(false);
 }
 """
+unit += r'''
+static void ui_comic_image_paint(uint8_t *fb,const uint8_t *gray,int w,int h,int left,int top){
+ for(int y=0;y<h;++y)for(int x=0;x<w;++x)epd_draw_pixel(left+x,top+y,ui_image_dither_gray(gray[y*w+x],left+x,top+y),fb);
+}
+static void apply_chapter_lead(const char *title,const char *label,size_t skip,unsigned height){
+ (void)title;(void)label;s_chapter_lead_skip=skip;s_chapter_lead_row_height=height;
+}
+'''
 unit+='\n'+function('reader_zoom_reset')
-for name in ('inline_ink_gray', 'reader_image_slots', 'reader_image_slot', 'reader_image_dims', 'alloc_page_bitmap', 'release_page_images', 'prepare_inline_image', 'draw_reader_images', 'heading_text_matches', 'load_chapter_at'):
+for name in ('reader_images_hidden', 'inline_ink_gray', 'reader_image_slots', 'reader_image_slot', 'reader_image_dims', 'alloc_page_bitmap', 'release_page_images', 'prepare_inline_image', 'draw_reader_images', 'heading_text_matches', 'load_chapter_at'):
     unit += '\n' + function(name)
 unit += r'''
 static void setup_images(int count){
@@ -312,6 +327,13 @@ int main(void){
  assert(pixels==1200&&pixel_min_x==70&&pixel_max_x==129);
  image_band=body;
  release_page_images();
+ hidden=true;source_kind=BOOK_KIND_CBZ;
+ assert(!reader_images_hidden());prepare_inline_image();assert(s_page_images[0].gray);
+ pixel_min_y=1<<30;pixel_max_y=-1;
+ draw_reader_images(&fb,s_page,body);
+ assert(pixel_min_y==body.y+(body.height-20)/2&&pixel_max_y==pixel_min_y+19);
+ source_kind=0;assert(reader_images_hidden());prepare_inline_image();assert(!s_page_images);
+ hidden=false;
  puts("PASS: >8 images, layout cache generation, grayscale bounds, partial decode/OOM, fallback aspect fit, full bleed and chapter rollback");
 }
 '''

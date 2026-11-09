@@ -60,7 +60,7 @@ static bool s_clock_pending,s_home_force_full_once,s_press_pending,fail,s_readin
 static int64_t s_clock_minute=-2,minute=100;
 static int paints,clock_paints,pushes,fulls,clock_faces,record_reads;
 static struct tm s_date={.tm_year=126,.tm_yday=285},date={.tm_year=126,.tm_yday=285};
-static int app_settings_home_component(void){return widget;}
+static app_home_component_t app_settings_home_component(void){return widget;}
 static bool fast;
 static bool app_settings_main_fast_refresh(void){return fast;}
 static int64_t ui_nav_clock_minute(void){return minute;}

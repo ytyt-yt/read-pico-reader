@@ -31,6 +31,8 @@ static bool media_ready_for_jobs=true;
 static bool read_pico_sd_io_ready(void){return media_ready_for_jobs;}
 static int jobs,decodes,fonts,writes,reads,mode,fail_alloc,task_ok=1,worker_context;
 static unsigned replaced;
+static uint64_t fingerprint;
+static unsigned fingerprint_reads;
 static size_t live,largest;
 static struct{void *p;size_t n;} memory[64];
 static void *heap_caps_malloc(size_t n,int caps){assert(caps==3);if(fail_alloc)return NULL;void *p=malloc(n);if(!p)return NULL;for(unsigned i=0;i<64;++i)if(!memory[i].p){memory[i].p=p;memory[i].n=n;live+=n;if(n>largest)largest=n;return p;}abort();}
@@ -44,7 +46,8 @@ static int xTaskCreate(void(*fn)(void *),const char *name,int stack,void *arg,in
 static void vTaskDelete(void *arg){(void)arg;longjmp(done,1);}
 static void vTaskDelay(int ms){mono+=ms*1000;}
 static int64_t esp_timer_get_time(void){return mono;}
-static int mock_stat(const char *p,struct stat *st){assert(worker_context);++reads;if(*p=='X')return -1;memset(st,0,sizeof(*st));st->st_mode=S_IFREG;st->st_size=100;st->st_mtime=200;return 0;}
+uint64_t book_cover_source_fingerprint(const char *p){(void)p;assert(worker_context);++fingerprint_reads;return fingerprint;}
+static int mock_stat(const char *p,struct stat *st){assert(worker_context);++reads;if(*p=='X')return -1;memset(st,0,sizeof(*st));st->st_mode=*p=='D'?S_IFDIR:S_IFREG;st->st_size=100;st->st_mtime=200;return 0;}
 #define stat(p,s) mock_stat(p,s)
 static book_cover_job_t request(const char *p){book_cover_job_t q={.width=164,.height=214,.stride=21,.contrast=100};strcpy(q.path,p);strcpy(q.title,"title");return q;}
 static bool book_auto_cover_render(const char*,const char*,const char*,unsigned,unsigned,uint8_t*);
@@ -60,6 +63,7 @@ void book_cover_store_generated(const char*p,const char*t,const char*a,const uin
 int book_cover_load_io(const char*p,const char*t,const char*a,uint8_t*out,bool list,unsigned*w,unsigned*h,bool*cache){(void)t;(void)a;(void)list;assert(worker_context);++decodes;*w=176;*h=240;memset(out,*p,176*240);*cache=false;
  if(mode==1){mode=0;replaced=book_cover_jobs_begin();book_cover_job_t q=request("B");assert(book_cover_jobs_submit(replaced,0,&q));}
  if(mode==2){mode=0;assert(!book_cover_jobs_quiesce(0));}
+ if(mode==3){mode=0;++fingerprint;}
  return *p=='N'?0:1;
 }
 static bool book_auto_cover_render(const char*p,const char*t,const char*a,unsigned w,unsigned h,uint8_t*out){(void)p;(void)t;(void)a;assert(!worker_context&&w==176&&h==240);++fonts;memset(out,33,w*h);return true;}
@@ -101,11 +105,43 @@ int main(void){
  generation=book_cover_jobs_begin();assert(book_cover_jobs_submit(generation,0,&q));assert(!book_cover_jobs_quiesce(20));run();assert(book_cover_jobs_quiesce(0));
  generation=book_cover_jobs_begin();for(unsigned slot=0;slot<9;++slot){q=request("A");assert(book_cover_jobs_submit(generation,slot,&q));}run();
  for(unsigned slot=0;slot<9;++slot){assert(book_cover_jobs_take(generation,slot,&result)==1);free(result.pixels);}
- assert(book_cover_jobs_quiesce(0));free(s_jobs);s_jobs=NULL;assert(!live);
+ generation=book_cover_jobs_begin();q=request("D");fingerprint=71;
+ assert(book_cover_jobs_submit(generation,0,&q));run();
+ assert(book_cover_jobs_take(generation,0,&result)==1&&result.pixels[0]=='D'&&result.source_fingerprint==71);free(result.pixels);
+ generation=book_cover_jobs_begin();q=request("D");mode=3;
+ assert(book_cover_jobs_submit(generation,0,&q));run();assert(book_cover_jobs_take(generation,0,&result)==-1);
+ generation=book_cover_jobs_begin();q=request("D");fingerprint=91;
+ assert(book_cover_jobs_submit(generation,0,&q));run();
+ assert(book_cover_jobs_take(generation,0,&result)==1);free(result.pixels);
+ uint64_t checked=0;unsigned before_checks=fingerprint_reads;before=decodes;old_writes=writes;
+ assert(book_cover_jobs_recheck(generation,0,&checked)==0&&fingerprint_reads==before_checks);
+ assert(book_cover_jobs_recheck(generation,0,&checked)==0&&fingerprint_reads==before_checks);
+ run();assert(book_cover_jobs_recheck(generation,0,&checked)==1&&checked==91);
+ assert(fingerprint_reads==before_checks+1&&decodes==before&&writes==old_writes);
+ fingerprint=92;assert(book_cover_jobs_recheck(generation,0,&checked)==0);run();
+ assert(book_cover_jobs_recheck(generation,0,&checked)==1&&checked==92);
+ assert(book_cover_jobs_recheck(generation,0,&checked)==0);
+ book_cover_jobs_cancel(generation);run();
+ assert(book_cover_jobs_recheck(generation,0,&checked)==-1);
+ generation=book_cover_jobs_begin();q=request("N");q.artwork_only=true;
+ assert(book_cover_jobs_submit(generation,0,&q));run();result=(book_cover_result_t){0};
+ assert(book_cover_jobs_take(generation,0,&result)==-1&&result.source_fingerprint==92);
+ assert(book_cover_jobs_recheck(generation,0,&checked)==0);run();
+ assert(book_cover_jobs_recheck(generation,0,&checked)==1&&checked==92);
+ task_ok=0;assert(book_cover_jobs_recheck(generation,0,&checked)==0);
+ assert(book_cover_jobs_recheck(generation,0,&checked)==-1);task_ok=1;
+ generation=book_cover_jobs_begin();q=request("/sdcard/comics/a");
+ assert(book_cover_jobs_submit(generation,0,&q));run();assert(book_cover_jobs_take(generation,0,&result)==1);free(result.pixels);
+ media_ready_for_jobs=false;before_checks=fingerprint_reads;
+ assert(book_cover_jobs_recheck(generation,0,&checked)==-1&&fingerprint_reads==before_checks);
+ media_ready_for_jobs=true;assert(book_cover_jobs_recheck(generation,0,&checked)==0);
+ assert(!book_cover_jobs_quiesce(0));run();assert(book_cover_jobs_quiesce(0));
+ assert(book_cover_jobs_recheck(generation,0,&checked)==-1);
+ free(s_jobs);s_jobs=NULL;assert(!live);
  puts("PASS: real bounded cover worker has no UI IO on queue/poll, packed hits skip gray/decode, stale generations and media cancellation discard results, UI-only auto glyphs, transient fallback not cached, all9 slots and OOM/task failures release resources");
 }
 '''
-if (root/'.kiiko-source-view.json').exists() and 'metalio47' in (root/'.kiiko-source-view.json').read_text():
+if (root/'.kiiko-source-view.json').exists() and __import__('json').loads((root/'.kiiko-source-view.json').read_text())['board']=='metalio47':
  unit=unit.replace(' puts("PASS:', ' assert(jpeg_cancels>0);\n puts("PASS:')
 with tempfile.TemporaryDirectory(prefix='kiiko-cover-jobs-') as folder:
  c=Path(folder)/'test.c';binary=Path(folder)/'test';c.write_text(unit)

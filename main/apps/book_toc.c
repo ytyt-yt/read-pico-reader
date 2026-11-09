@@ -216,8 +216,8 @@ static void volume_chevron(uint8_t *fb,EpdRect r,bool open) {
     }
 }
 
-void book_toc_render(uint8_t *fb, const char *book_title, size_t chapters,
-                     size_t current, int page, const char *message) {
+void book_toc_render_catalog(uint8_t *fb, const char *book_title, size_t chapters,
+                     size_t current, int page, const char *message, book_toc_title_fn get_title, void *context) {
     ui_clear_page(fb);
     ui_fill_rect_fast((EpdRect){0, 0, UI_LOCK_WIDTH, UI_LOCK_HEIGHT}, 0xe0, fb);
     ui_nav_status(fb);
@@ -229,11 +229,11 @@ void book_toc_render(uint8_t *fb, const char *book_title, size_t chapters,
     if (!title[0]) snprintf(title,sizeof(title),"%s","当前书籍");
     toc_title(fb, (EpdRect){TOC_LEFT,160,420,48}, 23, title, 0xe0);
     char total[48];
-    size_t volumes=book_navigation_volume_count();
+    size_t volumes=get_title ? 0 : book_navigation_volume_count();
     book_volume_t first_volume;
     bool front=book_navigation_volume(0,&first_volume)&&first_volume.number==0;
     if(volumes)snprintf(total,sizeof(total),"%u 卷",(unsigned)(volumes-front));
-    else snprintf(total, sizeof(total), "%u 节", (unsigned)chapters);
+    else snprintf(total, sizeof(total), !get_title && book_kind() == BOOK_KIND_CBZ ? "%u 页" : "%u 节", (unsigned)chapters);
     ui_text_box(fb,(EpdRect){482,160,166,48},23,total,EPD_DRAW_ALIGN_RIGHT,false);
     ui_fill_rect_fast((EpdRect){TOC_LEFT, 213, TOC_RIGHT - TOC_LEFT, 2}, 0x68, fb);
     if(volumes) {
@@ -252,7 +252,7 @@ void book_toc_render(uint8_t *fb, const char *book_title, size_t chapters,
         ui_text_box(fb,(EpdRect){72,408,540,72},25,"这本书没有可用目录",EPD_DRAW_ALIGN_CENTER,false);
     } else {
         for (int row = 0; row < BOOK_TOC_ROWS; ++row) {
-            int target=visible_target((size_t)page*BOOK_TOC_ROWS+row,chapters);
+            int target=get_title ? ((size_t)page*BOOK_TOC_ROWS+row<chapters ? (int)((size_t)page*BOOK_TOC_ROWS+row) : -1) : visible_target((size_t)page*BOOK_TOC_ROWS+row,chapters);
             if(target==-1)break;
             EpdRect r = book_toc_row_rect(row);
             if(target<=TOC_VOLUME_HIT) {
@@ -269,7 +269,7 @@ void book_toc_render(uint8_t *fb, const char *book_title, size_t chapters,
                 continue;
             }
             size_t index=(size_t)target;
-            size_t source_index = book_navigation_chapter(index);
+            size_t source_index = get_title ? index : book_navigation_chapter(index);
             if (source_index == SIZE_MAX) break;
             bool selected = index == current;
             ui_fill_round_rect(fb, r, 20, selected ? 0xc0 : UI_GRAY_WHITE);
@@ -279,8 +279,8 @@ void book_toc_render(uint8_t *fb, const char *book_title, size_t chapters,
             else snprintf(number, sizeof(number), "%02u", (unsigned)index + 1);
             ui_text_box(fb,(EpdRect){r.x+14,r.y+11,58,72},21,number,EPD_DRAW_ALIGN_LEFT,false);
             char raw[160] = "", label[160];
-            if (book_navigation_title(index, raw, sizeof(raw)) != ESP_OK || !raw[0])
-                snprintf(raw, sizeof(raw), "第 %u 节", (unsigned)index + 1);
+            if (!(get_title ? get_title(index, raw, sizeof(raw), context) : book_navigation_title(index, raw, sizeof(raw)) == ESP_OK) || !raw[0])
+                snprintf(raw, sizeof(raw), book_kind() == BOOK_KIND_CBZ ? "第 %u 页" : "第 %u 节", (unsigned)index + 1);
             char spine_default[32];
             snprintf(spine_default, sizeof(spine_default), "第 %u 节", (unsigned)source_index + 1);
             if (strcmp(raw, spine_default) == 0)
@@ -320,6 +320,11 @@ void book_toc_render(uint8_t *fb, const char *book_title, size_t chapters,
     char percent[24];
     snprintf(percent, sizeof(percent), "%d%%  ›", (page + 1) * 100 / pages);
     ui_text_box(fb,(EpdRect){468,1109,158,56},28,percent,EPD_DRAW_ALIGN_RIGHT,false);
+}
+
+void book_toc_render(uint8_t *fb, const char *book_title, size_t chapters,
+                     size_t current, int page, const char *message) {
+    book_toc_render_catalog(fb, book_title, chapters, current, page, message, NULL, NULL);
 }
 
 void book_toc_render_jump(uint8_t *fb, size_t chapters, int percent) {

@@ -7,6 +7,7 @@ from pathlib import Path
 from font_hanzi_host_support import font_hanzi_host_sources
 import subprocess
 import tempfile
+import sys
 from home_cover_cache_host_test import function
 ROOT=Path(__file__).resolve().parents[1]
 a=argparse.ArgumentParser();a.add_argument('--font',type=Path,default=ROOT/'main/assets/builtin.ttf');a.add_argument('--covers',type=Path);a.add_argument('--output',type=Path);args=a.parse_args()
@@ -40,6 +41,7 @@ size_t heap_caps_get_largest_free_block(int);
 #include "ttf_font.h"
 #include "epdiy.h"
 #include "ui_pinpad.h"
+#include "assets/ui_icons.h"
 static struct {void *p;size_t bytes;} allocations[8192];
 static size_t live,capacity=8*1024*1024;
 static int fail_after=-1,fallbacks;
@@ -58,10 +60,14 @@ enum EpdRotation epd_get_rotation(void){return display_rotation;}
 typedef struct {uint16_t x,y;} Coord_xy;
 #define _swap_int(a,b) {int temp=a;a=b;b=temp;}
 static uint8_t ui_contrast_gray(uint8_t gray){return gray;}
+#define UI_GRAY_BLACK 0
+#define UI_GRAY_LIGHT 224
+#define UI_SEL_INSET 4
+#define UI_SEL_RING 3
 '''
  for n in ('_rotate','epd_draw_pixel','epd_get_pixel','epd_draw_hline','epd_draw_vline','epd_fill_rect','epd_draw_circle','epd_fill_circle_helper','epd_fill_circle','epd_write_line','epd_draw_line'):
   unit+=function(n,ROOT/'components/epdiy/src/epdiy.c')+'\n'
- for n in ('ui_rotate_rect_to_fb','ui_fill_rect_fast','ui_blit_mono_bitmap','clamp_radius','draw_arc','ui_draw_round_rect','ui_fill_round_rect','ui_inset_rect','ui_draw_control_frame','ui_draw_separator'):unit+=function(n,ROOT/'main/ui/ui_kit.c')+'\n'
+ for n in ('ui_rotate_rect_to_fb','ui_fill_rect_fast','ui_blit_mono_bitmap','clamp_radius','draw_arc','ui_draw_round_rect','ui_fill_round_rect','ui_inset_rect','ui_draw_control_frame','ui_draw_separator','ui_draw_selected_round_rect','ui_draw_pressed_round_rect','ui_read_pixel','icon_nibble','ui_draw_icon'):unit+=function(n,ROOT/'main/ui/ui_kit.c')+'\n'
  unit+='\n'.join(line for line in (ROOT/'main/ui/ui_book_manage_layout.h').read_text().splitlines() if not line.startswith(('#include','#pragma')))+'\n'
  unit+=function('ui_root_shadow',ROOT/'main/ui/ui_root_style.h')+'\n'
  unit+=function('pixel',ROOT/'main/ui/ui_pinpad.c')+'\n'
@@ -82,6 +88,7 @@ static unsigned s_cover_pending_mask;
 #define SHELF_LIST_BOUNCE_PX 8
 #define SHELF_FAST_COVER_STRIDE 21
 #define SHELF_FAST_COVER_WIDTH 164
+#define UI_SHELF_FAST_STRIDE 21
 static struct {uint8_t *gray,*fast_bits;unsigned width,height;bool fast_white_edge;} s_covers[4];
 typedef struct {char name[256],author[128];bool has_progress,favorite;unsigned pct;} shelf_entry_t;
 static shelf_entry_t *s_shelf;
@@ -103,8 +110,14 @@ static void ui_hairline(uint8_t *fb,int y,int x,int w,uint8_t c){epd_draw_hline(
 static void copy_text(char *d,size_t n,const char *v){snprintf(d,n,"%s",v);}
 static void fit_text(char *v,int px,int w){while(*v&&ui_text_fixed_width_px(px,v)>w){size_t n=strlen(v)-1;while(n&&((unsigned char)v[n]&0xc0)==0x80)--n;v[n]=0;}}
 '''
+ unit += 'enum {UI_PAGER_NONE=-1,UI_PAGER_FIRST,UI_PAGER_PREVIOUS,UI_PAGER_NEXT,UI_PAGER_LAST};\n'
+ unit += 'static void ui_text_box(uint8_t *fb,EpdRect r,int px,const char *text,int align,bool wrap){ui_text_fixed_vc(fb,r.x+r.width/2,r.y+r.height/2,px,text,align,wrap); }\n'
+ for n in ('ui_rect_hit','ui_pager_area_at','ui_pager_rect_at','ui_pager_hit_at','ui_pager_area','ui_pager_rect','ui_pager_hit','ui_pager_target','ui_pager_draw_at','ui_pager_draw'):
+  unit += function(n,ROOT/'main/ui/ui_kit.c')+'\n'
+ for n in ('ui_shelf_row','ui_shelf_image','ui_shelf_list_frame','ui_shelf_header_rect','ui_shelf_header_button','ui_shelf_page_arrow','ui_shelf_pager_state','ui_shelf_pager','fit','ui_shelf_list_title','ui_shelf_list_details_at','ui_shelf_list_details','ui_shelf_cover_pixels'):
+  unit+=function(n,ROOT/'main/ui/ui_shelf.c')+'\n'
  unit+='#define FEEDBACK_SHADOW '+str(int('area.width += 2' in function('paint_list_cover_feedback',ROOT/'main/apps/app_book.c')))+'\n'
- for n in ('row_rect','shelf_cover_image','shelf_cover_frame_ready','draw_favorite_icon','draw_shelf_favorite_icon','cover_favorite_needs_white_edge','draw_shelf_cover','paint_list_cover_feedback','draw_list_title','draw_list_row'):
+ for n in ('row_rect','shelf_cover_image','shelf_cover_frame_ready','draw_favorite_icon','draw_shelf_favorite_icon','cover_favorite_needs_white_edge','draw_shelf_cover','paint_list_cover_feedback','draw_list_row'):
   unit+=function(n,ROOT/'main/apps/app_book.c')+'\n'
  unit+=r'''
 static void save(const char *path,uint8_t *frame){FILE *f=fopen(path,"wb");assert(f);for(int y=0;y<1216;++y)for(int x=0;x<684;++x){uint8_t v=(pixel(frame,x,y)>>4)*17;assert(fwrite(&v,1,1,f)==1);}assert(!fclose(f));}
@@ -115,9 +128,9 @@ int main(int argc,char **argv){
  ui_text_fixed_vc(fb,578,44,22,"78%",EPD_DRAW_ALIGN_RIGHT,false);
  ui_draw_round_rect(fb,(EpdRect){602,33,37,20},4,0);epd_fill_rect((EpdRect){607,38,23,10},0,fb);
  ui_text_fixed_vc(fb,36,122,52,"书架",EPD_DRAW_ALIGN_LEFT,false);
- ui_fill_round_rect(fb,(EpdRect){442,94,97,54},18,255);ui_draw_round_rect(fb,(EpdRect){442,94,97,54},18,0x70);ui_text_fixed_vc(fb,490,121,20,"管理",EPD_DRAW_ALIGN_CENTER,false);
- ui_fill_round_rect(fb,(EpdRect){551,94,97,54},18,255);ui_draw_round_rect(fb,(EpdRect){551,94,97,54},18,0x70);ui_text_fixed_vc(fb,599,121,20,"+ 导入",EPD_DRAW_ALIGN_CENTER,false);
- epd_fill_rect((EpdRect){36,195,612,2},0x60,fb);ui_fill_round_rect(fb,(EpdRect){36,184,612,788},20,255);ui_draw_control_frame(fb,(EpdRect){36,184,612,788},20,0x50);
+ ui_shelf_header_button(fb,ui_shelf_header_rect(0),"管理",false);
+ ui_shelf_header_button(fb,ui_shelf_header_rect(1),"+ 导入",false);
+ ui_fill_round_rect(fb,(EpdRect){36,184,612,788},20,255);ui_draw_control_frame(fb,(EpdRect){36,184,612,788},20,0x50);
  shelf_entry_t items[4]={{"我与地坛","史铁生",true,true,42},{"十八岁出门远行","余华",true,false,18},{"夏天、烟火和我的尸体","乙一",false,true,0},{"活山","娜恩 · 谢泼德",true,false,100}};
  s_shelf=items;app_ctx_t ctx={.fb=fb};
  for(int i=0;i<4;++i){char path[1024];snprintf(path,sizeof(path),"%s/%d.raw",argv[2],i);FILE *f=fopen(path,"rb");assert(f);assert(fread(&s_covers[i].width,4,1,f)==1&&fread(&s_covers[i].height,4,1,f)==1);unsigned bytes=s_covers[i].width*s_covers[i].height;assert(bytes<=176*240);s_covers[i].gray=malloc(bytes);assert(s_covers[i].gray&&fread(s_covers[i].gray,1,bytes,f)==bytes);fclose(f);
@@ -142,11 +155,25 @@ int main(int argc,char **argv){
  free(before);free(s_covers[i].gray);}
  for(int row=0;row<3;++row)for(int yy=0;yy<2;++yy)assert(pixel(fb,300,184+row*197+196+yy)<128);
  assert(pixel(fb,36,260)<128&&pixel(fb,37,260)<128&&pixel(fb,38,260)>=240);
- ui_text_fixed_vc(fb,342,1060,17,"15本书 · 01/04",EPD_DRAW_ALIGN_CENTER,false);
- ui_text_fixed_vc(fb,226,1060,22,"<",EPD_DRAW_ALIGN_CENTER,false);ui_text_fixed_vc(fb,458,1060,22,">",EPD_DRAW_ALIGN_CENTER,false);
+ ui_shelf_pager(fb,15,0,4,"本书");
  epd_draw_hline(0,1096,684,0x90,fb);epd_fill_rect((EpdRect){224,1097,54,4},0,fb);
- const char *nav[]={"首页","书架","文件管理","设置"};for(int i=0;i<4;++i){ui_draw_round_rect(fb,(EpdRect){65+i*171,1132,35,34},3,0);ui_text_fixed_vc(fb,85+i*171,1190,17,nav[i],EPD_DRAW_ALIGN_CENTER,false);}
+ const char *nav[]={"首页","书架","漫画","文件管理","设置"};
+ const ui_icon_t nav_icons[]={UI_ICON_HOUSE,UI_ICON_LIBRARY_BIG,UI_ICON_BOOK_OPEN,UI_ICON_FOLDER_OPEN,UI_ICON_SLIDERS_HORIZONTAL};
+ for(int i=0;i<5;++i){int center=(i*2+1)*684/10;ui_draw_icon(fb,center,1141,44,nav_icons[i],0);ui_text_fixed_vc(fb,center,1190,17,nav[i],EPD_DRAW_ALIGN_CENTER,false);}
+
+ uint8_t *controls_before=malloc(684*1216/2);assert(controls_before);memcpy(controls_before,fb,684*1216/2);
+ for(int slot=0;slot<2;++slot){EpdRect control=ui_shelf_header_rect(slot);const char *label=slot?"+ 导入":"管理";
+  ui_shelf_header_button(fb,control,label,true);
+  for(int y=0;y<1216;++y)for(int x=0;x<684;++x)
+   if(pixel(fb,x,y)!=pixel(controls_before,x,y))assert(x>=control.x&&x<control.x+control.width&&y>=control.y&&y<control.y+control.height);
+  ui_shelf_header_button(fb,control,label,false);assert(!memcmp(fb,controls_before,684*1216/2));
+ }
  save(argv[3],fb);
+ ui_shelf_header_button(fb,ui_shelf_header_rect(0),"搜索",false);ui_shelf_header_button(fb,ui_shelf_header_rect(1),"刷新",false);
+ epd_fill_rect((EpdRect){36,84,326,70},0xee,fb);ui_text_fixed_vc(fb,36,122,36,"漫画",EPD_DRAW_ALIGN_LEFT,false);
+ epd_fill_rect((EpdRect){168,1008,348,60},0xee,fb);ui_shelf_pager(fb,15,0,4,"部漫画");
+ char comic_preview[1024];snprintf(comic_preview,sizeof(comic_preview),"%s/comic.raw",argv[2]);save(comic_preview,fb);
+ memcpy(fb,controls_before,684*1216/2);free(controls_before);
  // 同一占位帧不因某张封面先解码而变化，点按回弹也不提前露出单张封面。
  uint8_t *placeholder=malloc(684*1216/2);assert(placeholder);
  memset(fb,255,684*1216/2);s_cover_pending_mask=8;
@@ -160,7 +187,12 @@ int main(int argc,char **argv){
  free(placeholder);
  // 长标题强制双行且仅触碰右侧文字区，避免作者和进度被覆盖。
  // A long title stays in the two-line text region without touching author/progress.
- memset(fb,255,684*1216/2);draw_list_title(fb,"名字很长名字很长名字很长名字很长名字很长名字很长名字很长",258);
+ // 最近章节长名称也只绘制在文字区，不越过右侧卡片边界。
+ // Long recent-chapter labels stay within the text field and cannot cross the card edge.
+ memset(fb,255,684*1216/2);
+ ui_shelf_list_details(fb,0,"漫画","24章",42,"最近：章节名很长章节名很长章节名很长章节名很长章节名很长章节名很长章节名很长");
+ for(int y=340;y<378;++y)for(int x=624;x<684;++x)assert(pixel(fb,x,y)==240);
+ memset(fb,255,684*1216/2);ui_shelf_list_title(fb,"名字很长名字很长名字很长名字很长名字很长名字很长名字很长",258);
  for(int y=0;y<1216;++y)for(int x=0;x<684;++x)if(pixel(fb,x,y)!=240)assert(x>=244&&x<622&&y>=237&&y<313);
  free(fb);ttf_font_unload();puts("PASS: native list painting and bounded bounce/settle with no extra frame; uniform boxes, aspect-fill crop, 4 rows, favorites, progress, two-line UTF-8 bounds");
 }
@@ -168,7 +200,7 @@ int main(int argc,char **argv){
  (p/'test.c').write_text(unit)
  flags=['cc','-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-variable','-Wno-unused-function','-Wno-missing-field-initializers','-fsanitize=address,undefined','-ffunction-sections','-fdata-sections','-I'+str(p),'-I'+str(ROOT/'main/ui'),'-I'+str(ROOT/'main/font'),'-I'+str(ROOT/'main')]
  subprocess.run(flags+['-c',str(ROOT/'main/font/ttf_font.c'),'-o',str(p/'ttf.o')],check=True)
- subprocess.run(flags+font_hanzi_host_sources(ROOT,p)+[str(p/'test.c'),str(p/'assets.c'),str(p/'ttf.o'),str(ROOT/'main/ui/ui_gesture.c'),str(ROOT/'main/ui/ui_image_dither.c'),'-Wl,-dead_strip','-lm','-o',str(p/'test')],check=True)
+ subprocess.run(flags+font_hanzi_host_sources(ROOT,p)+[str(p/'test.c'),str(p/'assets.c'),str(p/'ttf.o'),str(ROOT/'main/ui/ui_gesture.c'),str(ROOT/'main/ui/ui_image_dither.c'),('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),'-lm','-o',str(p/'test')],check=True)
  if args.covers or args.output:
   from PIL import Image
  for i in range(4):
@@ -182,3 +214,4 @@ int main(int argc,char **argv){
  if args.output:
   args.output.parent.mkdir(parents=True,exist_ok=True)
   Image.frombytes('L',(684,1216),(p/'list.raw').read_bytes()).save(args.output)
+  Image.frombytes('L',(684,1216),(p/'comic.raw').read_bytes()).save(args.output.with_name(args.output.stem+'-comics'+args.output.suffix))

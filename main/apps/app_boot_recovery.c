@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0
  * 中文：启动中断的图书提示及明确确认后的单文件删除；不解析故障书、不自动删除。
  * English: Show interrupted book opening and offer confirmed single-file deletion; never parse the failed book or delete automatically.
- * 冻结：只处理启动记录中确切的普通 TXT/EPUB；无卡/删除失败可重试；绘制无文件操作。
- * Frozen: Handle only the exact regular TXT/EPUB in the startup record; allow retries after absent media or failed deletion. Rendering has no file operations.
+ * 冻结：只处理启动记录中确切的普通 TXT/EPUB/CBZ；无卡/删除失败可重试；绘制无文件操作。
+ * Frozen: Handle only the exact regular TXT/EPUB/CBZ in the startup record; allow retries after absent media or failed deletion. Rendering has no file operations.
+ * 用户要求 CBZ 漫画：书籍入口与管理同时识别 .cbz，沿用现有生命周期与存储限制。
+ * User requests CBZ comics: book entry/management also accept .cbz, retaining lifecycle and storage limits.
  */
 #ifdef ESP_PLATFORM
 #include "ui_locale_format.h"
@@ -63,7 +65,7 @@ static esp_err_t delete_book(void) {
     char recorded[PICO_BOOT_PATH_MAX];
     if (!pico_boot_interrupted_book(recorded, sizeof(recorded)) || strcmp(recorded, s_path)) return ESP_ERR_INVALID_STATE;
     const char *name = strrchr(s_path, '/'), *ext = strrchr(s_path, '.');
-    if (!name || !ext || (strcasecmp(ext, ".epub") && strcasecmp(ext, ".txt"))) return ESP_ERR_INVALID_ARG;
+    if (!name || !ext || (strcasecmp(ext, ".epub") && strcasecmp(ext, ".txt") && strcasecmp(ext, ".cbz"))) return ESP_ERR_INVALID_ARG;
     if (!strncmp(s_path, "/sdcard/", 8)) {
         read_pico_sd_info_t sd = {0}; read_pico_sd_get_info(&sd);
         if (!sd.present || !sd.mounted) return ESP_ERR_INVALID_STATE;

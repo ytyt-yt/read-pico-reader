@@ -29,7 +29,11 @@ static bool immersive;
 static bool app_settings_reader_immersive(void){return immersive;}
 static bool s_reader_fullscreen=false,s_toolbar,s_clear_confirm,s_reader_footer_pending,s_save_failed;
 static const char *s_text="body";
-static size_t s_chapter=36,total_chapters=48;
+static size_t s_chapter=36,total_chapters=48,layout_pages=48;
+#define BOOK_KIND_CBZ 2
+static int source_kind=BOOK_KIND_CBZ;
+static int book_kind(void){return source_kind;}
+static size_t book_layout_page_count(void){return layout_pages;}
 static int64_t s_reader_footer_due_ms;
 static int calls,guards,text_calls,bar_calls,fill_calls,status_calls;
 static void ui_nav_status(uint8_t *fb){(void)fb;++status_calls;}
@@ -75,7 +79,10 @@ for name in ['draw_reader_header','progress_rect','reader_footer_progress', 'dra
     unit += function(name, source)+'\n'
 unit += r'''
 int main(void){
- char text[48];reader_footer_progress(text,sizeof(text),74);assert(!strcmp(text,"37/48  74%"));
+ char text[48];
+ source_kind=0;reader_footer_progress(text,sizeof(text),6);assert(!strcmp(text,"7/48  6%"));
+ source_kind=BOOK_KIND_CBZ;
+ reader_footer_progress(text,sizeof(text),74);assert(!strcmp(text,"37/48  74%"));
  total_chapters=0;reader_footer_progress(text,sizeof(text),0);assert(!strcmp(text,"0/0  0%"));total_chapters=48;
  s_chapter=99;reader_footer_progress(text,sizeof(text),100);assert(!strcmp(text,"48/48  100%"));s_chapter=36;
  s_reader_fullscreen=false;uint8_t none=0;

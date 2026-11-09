@@ -43,3 +43,8 @@ idf_component_register(
 # Upstream stays unmodified: shrink only, and never promote its warnings to this project's errors.
 set_source_files_properties(${webp_decoder_sources} PROPERTIES COMPILE_OPTIONS "-w")
 target_compile_options(${COMPONENT_LIB} PRIVATE -Os)
+
+# 漫画预解码与通用WebP共享PSRAM分配及余量保护，不修改第三方源码。
+# Comics and general WebP share PSRAM allocation and headroom guards without vendor edits.
+set_source_files_properties("libwebp/src/utils/utils.c" PROPERTIES
+    COMPILE_OPTIONS "-include;${CMAKE_CURRENT_LIST_DIR}/webp_alloc.h")

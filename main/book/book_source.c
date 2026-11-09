@@ -1,12 +1,18 @@
 /* SPDX-FileCopyrightText: 2026 mindreset
  * SPDX-License-Identifier: Apache-2.0
- * 中文：TXT 与 EPUB 单实例书源分派，不依赖界面。
- * English: Singleton TXT and EPUB source dispatch without UI dependencies.
+ * 中文：TXT、EPUB 与 CBZ 单实例书源分派，不依赖界面。
+ * English: Singleton TXT, EPUB and CBZ source dispatch without UI dependencies.
  * 冻结：TXT 保留源字节偏移，EPUB 采用累计 spine HTML 字节；兼容纯文本加载，不写文件。
  * Frozen: TXT retains source offsets; EPUB uses cumulative spine HTML bytes; retain plain-text loading and never write files.
+ * 用户要求增加 CBZ 漫画：每图一章，进度按页数换算，不改变旧书进度单位。
+ * User requests CBZ comics: one image per chapter, page-based progress, retaining existing book units.
  */
 #include "book_source_internal.h"
 #include "book_epub.h"
+#include "book_cbz.h"
+#if KIIKO_BOARD_METALIO47
+#include "book_comic_cache.h"
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -22,6 +28,7 @@ static bool s_io_suspended;
 static struct stat s_io_stat;
 #else
 #endif
+static book_cbz_t *s_cbz;
 esp_err_t book_open(const char *path) {
     book_close();
 #if KIIKO_BOARD_METALIO47
@@ -32,6 +39,7 @@ esp_err_t book_open(const char *path) {
 #endif
     const char *ext = strrchr(path, '.');
     if (ext && !strcasecmp(ext, ".epub")) return book_epub_open(path, &s_epub);
+    if (ext && !strcasecmp(ext, ".cbz")) return book_cbz_open(path, &s_cbz);
     if (!ext || strcasecmp(ext, ".txt")) return ESP_ERR_NOT_SUPPORTED;
     esp_err_t err = book_txt_open(&s_book, path);
     if (err != ESP_OK) book_close();
@@ -42,17 +50,20 @@ void book_close(void) {
     s_io_suspended = false; s_io_path[0] = 0;
 #else
 #endif
+    book_cbz_close(s_cbz); s_cbz = NULL;
     book_epub_close(s_epub); s_epub = NULL;
     book_txt_close(&s_book);
 }
 void book_set_embedded_fonts(bool on) {
     if (s_epub) book_epub_set_fonts_enabled(s_epub, on);
 }
-size_t book_chapter_count(void) { return s_epub ? book_epub_chapter_count(s_epub) : s_book.count; }
+size_t book_chapter_count(void) { if (s_cbz) return book_cbz_count(s_cbz); return s_epub ? book_epub_chapter_count(s_epub) : s_book.count; }
 size_t book_navigation_count(void) {
+    if (s_cbz) return book_cbz_count(s_cbz);
     return s_epub ? book_epub_navigation_count(s_epub) : s_book.nav_count?s_book.nav_count:s_book.count;
 }
 size_t book_navigation_chapter(size_t position) {
+    if (s_cbz) return position < book_cbz_count(s_cbz) ? position : SIZE_MAX;
     return s_epub ? book_epub_navigation_chapter(s_epub, position) :
                     s_book.nav_count?book_txt_nav_chapter(&s_book,position):position<s_book.count?position:SIZE_MAX;
 }
@@ -91,14 +102,16 @@ esp_err_t book_navigation_volume_title(size_t index,char *buf,size_t cap) {
     return n>=0&&(size_t)n<cap?ESP_OK:ESP_ERR_INVALID_SIZE;
 }
 esp_err_t book_chapter_title(size_t i, char *buf, size_t cap) {
+    if (s_cbz) return book_cbz_title(s_cbz, i, buf, cap);
     if (s_epub) return book_epub_chapter_title(s_epub, i, buf, cap);
     return book_txt_title(&s_book,i,false,buf,cap);
 }
 esp_err_t book_chapter_load(size_t i, char **utf8, size_t *len) {
     if (!utf8 || !len) return ESP_ERR_INVALID_ARG;
     *utf8 = NULL; *len = 0;
-    if (s_epub) {
-        html_text_t text = {0}; esp_err_t err = book_epub_load(s_epub, i, &text);
+    if (s_epub || s_cbz) {
+        html_text_t text = {0};
+        esp_err_t err = s_cbz ? book_cbz_load(s_cbz, i, &text) : book_epub_load(s_epub, i, &text);
         if (err != ESP_OK) return err;
         *utf8 = text.utf8; *len = text.len; text.utf8 = NULL;
         html_text_free(&text); return ESP_OK;
@@ -109,6 +122,7 @@ esp_err_t book_chapter_load(size_t i, char **utf8, size_t *len) {
 esp_err_t book_chapter_load_blocks(size_t i, html_text_t *out) {
     if (!out) return ESP_ERR_INVALID_ARG;
     memset(out, 0, sizeof(*out));
+    if (s_cbz) return book_cbz_load(s_cbz, i, out);
     if (s_epub) return book_epub_load(s_epub, i, out);
     return book_chapter_load(i, &out->utf8, &out->len);
 }
@@ -120,16 +134,21 @@ esp_err_t book_chapter_load_blocks_target(size_t i, const char *anchor,
                                            size_t source_offset, size_t *text_offset,
                                            html_text_t *out) {
     if (text_offset) *text_offset = 0;
+    if (s_cbz) return book_cbz_load(s_cbz, i, out);
     if (s_epub) return book_epub_load_target(s_epub, i, anchor, source_offset, text_offset, out);
     if(!out)return ESP_ERR_INVALID_ARG;
     memset(out,0,sizeof(*out));
     return book_txt_load_target(&s_book,i,source_offset,text_offset,&out->utf8,&out->len);
 }
-uint32_t book_total_bytes(void) { return s_epub ? book_epub_total_bytes(s_epub) : s_book.total; }
+uint32_t book_total_bytes(void) {
+    if (s_cbz) return (uint32_t)book_cbz_count(s_cbz);
+    return s_epub ? book_epub_total_bytes(s_epub) : s_book.total;
+}
 uint32_t book_chapter_byte_offset(size_t i) {
+    if (s_cbz) return i < book_cbz_count(s_cbz) ? (uint32_t)i : 0;
     return s_epub ? book_epub_chapter_byte_offset(s_epub, i) : i < s_book.count ? s_book.entries[i].offset : 0;
 }
-book_kind_t book_kind(void) { return s_epub ? BOOK_KIND_EPUB : BOOK_KIND_TXT; }
+book_kind_t book_kind(void) { if (s_cbz) return BOOK_KIND_CBZ; return s_epub ? BOOK_KIND_EPUB : BOOK_KIND_TXT; }
 #if KIIKO_BOARD_METALIO47
 int book_chapter_prefetch_step(size_t chapter) {
     return s_epub?book_epub_prefetch_step(s_epub,chapter):-1;
@@ -137,15 +156,21 @@ int book_chapter_prefetch_step(size_t chapter) {
 #else
 #endif
 esp_err_t book_chapter_image(size_t chapter, const char *src, uint8_t **data, size_t *size, bool *png) {
+    if (s_cbz) return book_cbz_image(s_cbz, chapter, src, data, size, png);
     return s_epub ? book_epub_image(s_epub, chapter, src, data, size, png) : ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t book_chapter_image_dimensions(size_t chapter, const char *src, unsigned *width, unsigned *height) {
+    if (s_cbz) return book_cbz_dimensions(s_cbz, chapter, src, width, height);
     return s_epub ? book_epub_image_dimensions(s_epub, chapter, src, width, height) : ESP_ERR_NOT_SUPPORTED;
 }
 #if KIIKO_BOARD_METALIO47
 
 esp_err_t book_suspend_io(void) {
+    if (s_cbz) {
+        esp_err_t err = book_comic_cache_suspend_io();
+        return err == ESP_OK ? book_cbz_suspend_io(s_cbz) : err;
+    }
     if (s_epub) return book_epub_suspend_io(s_epub);
     if (!s_book.file || s_io_suspended) return ESP_OK;
     if (fstat(fileno(s_book.file), &s_io_stat)) return ESP_FAIL;
@@ -154,6 +179,11 @@ esp_err_t book_suspend_io(void) {
     return result ? ESP_FAIL : ESP_OK;
 }
 esp_err_t book_resume_io(void) {
+    if (s_cbz) {
+        esp_err_t err = book_cbz_resume_io(s_cbz, s_io_path);
+        if (err == ESP_OK) book_comic_cache_resume_io(s_io_path);
+        return err;
+    }
     if (s_epub) return book_epub_resume_io(s_epub);
     if (!s_io_suspended) return ESP_OK;
     FILE *file = fopen(s_io_path, "rb");
@@ -166,8 +196,8 @@ esp_err_t book_resume_io(void) {
     s_book.file = file; s_io_suspended = false;
     return ESP_OK;
 }
-// EPUB恢复由其ZIP对象管理；非空EPUB保守地视为仍需媒体。
-// EPUB owns its ZIP state; conservatively require media while that object exists.
-bool book_io_pending(void) { return s_io_suspended || s_epub != NULL; }
+// EPUB与CBZ各自管理ZIP恢复；保留对象时仍需媒体。
+// EPUB and CBZ own their ZIP recovery; retained source objects still require media.
+bool book_io_pending(void) { return s_io_suspended || s_epub != NULL || s_cbz != NULL; }
 #else
 #endif

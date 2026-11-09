@@ -191,5 +191,17 @@ int main(void) {
     assert(present&&durable_size==sizeof(legacy)&&erases==1);
     fail_commit=false;free_bytes=SIZE_MAX;
     puts("PASS: compact/legacy startup records; interrupted EPUB quarantine; unsupported cache ignored; low-space key-only reclaim; interrupted reclaim and failed commits stay safe; retry after transient NVS failure; settings/progress preserved");
+    // 保持旧主页面编号，增加漫画目录的一次性恢复，不改变持久记录大小。
+    // Retain old tab IDs and add one-shot comic-directory resume without changing record size.
+    pico_boot_init(false); pico_boot_ready();
+    for (unsigned tab = 0; tab < 6; ++tab) {
+        pico_resume_t comic = {.tab = tab};
+        strcpy(comic.path, "/sdcard/comics/漫画名称");
+        if (tab == 4) { assert(pico_boot_save_resume(&comic) == ESP_ERR_INVALID_ARG); continue; }
+        assert(pico_boot_save_resume(&comic) == ESP_OK);
+        pico_boot_init(false); pico_boot_ready();
+        assert(pico_boot_take_resume(&out) && out.tab == tab && !out.reader && !strcmp(out.path, comic.path));
+        assert(!pico_boot_take_resume(&out));
+    }
     puts("PASS: one-shot reader/fullscreen resume; power-cut book quarantine; explicit retry; no false book blame; absent/corrupt NVS and commit failure; checked paths");
 }

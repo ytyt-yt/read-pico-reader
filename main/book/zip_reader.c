@@ -107,10 +107,19 @@ static bool extras_valid(zip_reader_t* z, uint32_t pos, uint16_t len, bool local
 }
 
 static uint32_t zip_crc32(const uint8_t* data, size_t len) {
+    // 与旧逐位算法使用同一多项式；4位查表保留每次完整提取的校验。
+    // Use the same polynomial with four-bit lookup, retaining CRC on every full extraction.
+    static const uint32_t table[16] = {
+        UINT32_C(0x00000000), UINT32_C(0x1db71064), UINT32_C(0x3b6e20c8), UINT32_C(0x26d930ac),
+        UINT32_C(0x76dc4190), UINT32_C(0x6b6b51f4), UINT32_C(0x4db26158), UINT32_C(0x5005713c),
+        UINT32_C(0xedb88320), UINT32_C(0xf00f9344), UINT32_C(0xd6d6a3e8), UINT32_C(0xcb61b38c),
+        UINT32_C(0x9b64c2b0), UINT32_C(0x86d3d2d4), UINT32_C(0xa00ae278), UINT32_C(0xbdbdf21c),
+    };
     uint32_t crc = UINT32_MAX;
     while (len--) {
         crc ^= *data++;
-        for (int i = 0; i < 8; ++i) crc = (crc >> 1) ^ (UINT32_C(0xedb88320) & (0U - (crc & 1U)));
+        crc = (crc >> 4) ^ table[crc & 15];
+        crc = (crc >> 4) ^ table[crc & 15];
     }
     return ~crc;
 }

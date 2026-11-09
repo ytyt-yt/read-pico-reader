@@ -30,13 +30,20 @@ static void *s_epub;
 static char s_io_path[512];
 static bool s_io_suspended;
 static struct stat s_io_stat;
+typedef struct {zip_reader_t *zip;} book_cbz_t;
+static book_cbz_t *s_cbz,*s_cache_book;
+static unsigned pauses,cache_closes;
+static void book_comic_cache_pause(void){++pauses;}
+static void book_comic_cache_close(void){assert(!s_cache_book->zip->file);s_cache_book=NULL;++cache_closes;}
 static int book_epub_suspend_io(void *b){(void)b;return ESP_OK;}
 static int book_epub_resume_io(void *b){(void)b;return ESP_OK;}
 '''
 for name,rel in [('ttf_font_suspend_io','font/ttf_font.c'),('ttf_font_resume_io','font/ttf_font.c'),
                  ('zip_suspend_io','book/zip_reader.c'),('zip_resume_io','book/zip_reader.c'),
-                 ('book_suspend_io','book/book_source.c'),('book_resume_io','book/book_source.c')]:
-    unit+=function(name,root/'main'/rel)+'\n'
+                 ('book_cbz_suspend_io','book/book_cbz.c'),('book_cbz_resume_io','book/book_cbz.c'),
+                 ('book_comic_cache_suspend_io','book/book_comic_cache.c'),('book_comic_cache_resume_io','book/book_comic_cache.c'),
+                 ('book_suspend_io','book/book_source.c'),('book_resume_io','book/book_source.c'),('book_io_pending','book/book_source.c')]:
+    unit+=function(name,root/'main'/rel).replace('s_book','s_cache_book')+'\n' if 'comic_cache' in rel else function(name,root/'main'/rel)+'\n'
 unit+=r'''
 static void fill(const char *path){FILE *f=fopen(path,"wb");assert(f);assert(fwrite("abcdefgh",1,8,f)==8);assert(!fclose(f));}
 int main(void){
@@ -77,11 +84,32 @@ int main(void){
  assert(book_suspend_io()==ESP_OK);assert(!unlink(second));
  assert(book_resume_io()!=ESP_OK&&!s_book.file&&s_book.count==99);
  fill(second);assert(book_resume_io()==ESP_OK&&s_book.file);fclose(s_book.file);
+
+ // 两个漫画归档一起挂起，前台索引保留，后台恢复失败退回同步阅读。
+ // Suspend both comic archives, retain indexes, and fall back to synchronous reads if cache recovery fails.
+ zip_reader_t source_zip={.file=fopen(second,"rb"),.count=128};
+ zip_reader_t cache_zip={.file=fopen(second,"rb"),.count=128};
+ book_cbz_t comic={&source_zip},cache={&cache_zip};s_cbz=&comic;s_cache_book=&cache;
+ assert(source_zip.file&&cache_zip.file&&book_io_pending());
+ for(int loop=0;loop<100;++loop){
+  unsigned before=pauses;
+  assert(book_suspend_io()==ESP_OK&&pauses==before+1&&!source_zip.file&&!cache_zip.file);
+  assert(source_zip.count==128&&cache_zip.count==128&&book_io_pending());
+  assert(book_resume_io()==ESP_OK&&source_zip.file&&cache_zip.file);
+  assert(fgetc(source_zip.file)=='a'&&fgetc(cache_zip.file)=='a');
+ }
+ assert(book_suspend_io()==ESP_OK);
+ f=fopen(second,"ab");assert(f);fputc('x',f);fclose(f);
+ assert(book_resume_io()!=ESP_OK&&!source_zip.file&&!cache_zip.file);
+ fill(second);assert(book_resume_io()==ESP_OK&&source_zip.file&&cache_zip.file);
+ assert(book_suspend_io()==ESP_OK);++cache_zip.io_stat.st_size;
+ assert(book_resume_io()==ESP_OK&&source_zip.file&&!s_cache_book&&cache_closes==1);
+ fclose(source_zip.file);s_cbz=NULL;assert(!book_io_pending());
  unlink(first);unlink(second);
- puts("PASS: real font/ZIP/TXT IO suspension x100; glyph caches/face identity/file positions/5000-entry index retained; missing/changed media rejected; no settings writes");
+ puts("PASS: real font/ZIP/TXT/CBZ and independent comic-cache IO suspension x100; glyph caches/face identity/file positions/5000-entry index retained; missing/changed media rejected; no settings writes");
 }
 '''
 with tempfile.TemporaryDirectory() as d:
     p=Path(d);(p/'test.c').write_text(unit)
-    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-g','-fsanitize=address,undefined',str(p/'test.c'),'-o',str(p/'test')],check=True)
+    subprocess.run(['cc','-std=c11','-D_DEFAULT_SOURCE','-Wall','-Wextra','-Werror','-g','-fsanitize=address,undefined',str(p/'test.c'),'-o',str(p/'test')],check=True)
     subprocess.run([str(p/'test')],check=True)

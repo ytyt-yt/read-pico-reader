@@ -11,6 +11,8 @@
  * Event loop for page-agnostic work: touch debounce, the three keys and
  * the menu handle, on_exit/on_enter, present, lock, delayed SD font load.
  * Page state and refresh cadence stay in main/apps/; gesture recognition is shared.
+ * 用户授权五栏导航：按稳定页面编号识别主页面和保存漫画目录，浏览/跨章仍由页面负责。
+ * User-authorized five tabs: recognize stable main-page IDs and checkpoint comic directories; pages still own browsing and chapter transitions.
  *
  * 冻结（用户2026-10-16修订）：四个主页面左右键循环切换，中键长按全刷；书架中键短按切换左右键的分页控制。
  * 主页面中键短按延后到抬手，长按不执行短按；离开主页面立即取消按住状态。
@@ -668,7 +670,7 @@ static void menu_feedback(app_ctx_t* ctx, const app_desc_t* current,
 // Leave the old page, enter the new one, then present a full page.
 static bool main_page_ready(app_ctx_t* ctx, const app_desc_t* app) {
     int index = app_index_of(app);
-    return index >= 0 && index < 4 &&
+    return ui_nav_page_valid(index) &&
            app->main_page_visible && app->main_page_visible(ctx);
 }
 
@@ -678,9 +680,9 @@ static app_redraw_t main_key_action(app_ctx_t *ctx,const app_desc_t *current,int
     if(held)return key==UI_KEY_2?APP_REDRAW_FULL:APP_REDRAW_NONE;
     app_redraw_t redraw=APP_REDRAW_NONE;
     if(current->on_main_key && current->on_main_key(ctx,key,&redraw))return redraw;
-    int tab=app_index_of(current);
-    if(tab>=0 && tab<4 && (key==UI_KEY_1||key==UI_KEY_3))
-        ui_nav_request(ctx,(tab+(key==UI_KEY_1?3:1))%4);
+    int slot=ui_nav_slot_for(app_index_of(current));
+    if(slot>=0 && (key==UI_KEY_1||key==UI_KEY_3))
+        ui_nav_request(ctx,ui_nav_page_at((slot+(key==UI_KEY_1?UI_NAV_COUNT-1:1))%UI_NAV_COUNT));
     return APP_REDRAW_NONE;
 }
 
@@ -745,7 +747,7 @@ static void switch_to(
     const int probe_from=app_index_of(*current);
 #endif
     bool main_source = navigation_page_ready(ctx, *current);
-    bool shelf_source = main_source && app_index_of(*current) == 1;
+    bool shelf_source = main_source && (app_index_of(*current) == 1 || app_index_of(*current) == UI_NAV_COMICS);
     display_main_transition_cancel();
     if ((*current)->on_exit != NULL) (*current)->on_exit(ctx);
 #if defined(KIIKO_LOCAL_LATENCY) || KIIKO_BOARD_METALIO47
@@ -952,12 +954,13 @@ static void prepare_lock(app_ctx_t *ctx, const app_desc_t *current, bool feedbac
     if (feedback) app_lock_feedback(ctx->hl);
     if (current->on_before_lock) current->on_before_lock(ctx);
     int tab = app_index_of(current);
-    pico_resume_t resume = {.tab = tab >= 0 && tab < 4 ? (uint8_t)tab : 0};
+    pico_resume_t resume = {.tab = ui_nav_page_valid(tab) ? (uint8_t)tab : 0};
     bool fullscreen = false;
     if (tab == 1 && app_book_resume_context(resume.path, sizeof(resume.path), &fullscreen)) {
         resume.reader = 1;
         resume.fullscreen = fullscreen;
     }
+    if (tab == UI_NAV_COMICS) (void)app_comics_resume_context(resume.path, sizeof(resume.path));
 #if KIIKO_BOARD_METALIO47
     app_lock_set_resume_ready(pico_boot_save_resume(&resume) == ESP_OK);
     ESP_LOGI(TAG, "S31 lock checkpoint_ms=%lld", (long long)((esp_timer_get_time() - started_at) / 1000));
@@ -1089,7 +1092,7 @@ void app_loop_run(const app_loop_config_t* config) {
     while (true) {
         unsigned requested_cover_policy = (unsigned)app_settings_main_refresh_mode() | ((unsigned)app_settings_system_contrast() << 8);
         if (requested_cover_policy != cover_policy) {
-            app_home_cover_mode_changed(); app_book_cover_mode_changed();
+            app_home_cover_mode_changed(); app_book_cover_mode_changed(); app_comics_cover_mode_changed();
             cover_policy = requested_cover_policy;
         }
         cst836u_touch_t touch = { 0 };

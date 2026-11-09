@@ -52,6 +52,7 @@ extern const app_desc_t app_onboarding;
 #include "app_font_context.h"
 #include "ui_kit.h"
 #include "ui_font.h"
+#include "ui_nav_layout.h"
 #include "vcom_setup.h"
 
 static const char* TAG = "read_pico";
@@ -225,7 +226,10 @@ void app_main(void) {
     const app_desc_t *first = app_home_page();
     pico_resume_t resume = {0};
     if (pico_boot_take_resume(&resume)) {
-        if (!resume.reader) first = app_at(resume.tab);
+        if (!resume.reader) {
+            if (resume.tab == UI_NAV_COMICS) (void)app_comics_request_resume(resume.path);
+            first = app_at(resume.tab);
+        }
         else {
             // 挂载等待有界；恢复入口已消费，无卡或资源失败不会反复自动开书。
             // Bound mount waiting after consuming the checkpoint; absent media or failed resources cannot auto-open in a loop.

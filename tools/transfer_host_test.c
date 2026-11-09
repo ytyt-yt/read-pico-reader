@@ -161,6 +161,8 @@ int main(void) {
     assert(mkdtemp(root));
     assert(decode_name("%E4%B8%AD%E6%96%87.epub", name));
     assert(!strcmp(name, "中文.epub"));
+    assert(decode_name("%E6%BC%AB%E7%94%BB.CBZ", name));
+    assert(!strcmp(name, "漫画.CBZ"));
     const char *bad[] = {"../a.txt", "%2e%2e.txt", "a%2fb.txt", "a%5cb.txt", "a%00.txt", "a%ff.txt", "a%C0%AF.txt", "a%ED%A0%80.txt", "a%F4%90%80%80.txt", "a%.txt", "a.pdf", "a.txt.", ".txt", "a:book.txt"};
     for (size_t i = 0; i < sizeof(bad)/sizeof(*bad); ++i) assert(!decode_name(bad[i], name));
     char longname[128]; memset(longname, 'a', 117); strcpy(longname + 117, ".txt");

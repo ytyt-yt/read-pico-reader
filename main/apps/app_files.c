@@ -12,6 +12,8 @@
  * Authorized keyboard revision: rename uses shared T9/QWERTY and a steady caret; exit frees candidates.
  * 用户修订：输入只刷新变化区域，布局切换局部灰阶，避免打字累计整屏清残影。
  * User revision: input refreshes changed regions; layout switches use local grayscale, without accumulating whole-page cleanup.
+ * 用户要求 CBZ 漫画：书籍入口与管理同时识别 .cbz，沿用现有生命周期与存储限制。
+ * User requests CBZ comics: book entry/management also accept .cbz, retaining lifecycle and storage limits.
  */
 #if KIIKO_BOARD_METALIO47
 #ifdef ESP_PLATFORM
@@ -269,7 +271,7 @@ static void copy_utf8(char *dst, size_t cap, const char *src) {
 
 static bool is_book_path(const char *path) {
     const char *ext = strrchr(path, '.');
-    return ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt"));
+    return ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt") || !strcasecmp(ext, ".cbz"));
 }
 
 // 列表只取简短书名和作者，非书籍与详情继续用原基名；没有额外TF读取。
@@ -561,7 +563,7 @@ static bool supported(int folder, const char *name) {
     if (!name[0] || name[0] == '.' || !strncmp(name, "._", 2)) return false;
     const char *ext = strrchr(name, '.');
     if (!ext) return false;
-    if (folder == 0) return !strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt");
+    if (folder == 0) return !strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt") || !strcasecmp(ext, ".cbz");
     if (folder == 1) return !strcasecmp(ext, ".jpg") || !strcasecmp(ext, ".jpeg") || !strcasecmp(ext, ".png") || !strcasecmp(ext, ".webp");
     return !strcasecmp(ext, ".ttf") || !strcasecmp(ext, ".otf");
 }
@@ -1056,7 +1058,7 @@ static app_redraw_t on_tick(app_ctx_t *ctx) {
 static void open_selected(app_ctx_t *ctx) {
     const char *ext = strrchr(file_item_name(&s_selected), '.');
     if (!ext) { snprintf(s_message, sizeof(s_message), "没有可用的打开方式"); return; }
-    if (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt")) {
+    if (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt") || !strcasecmp(ext, ".cbz")) {
         extern const app_desc_t app_book;
 #if KIIKO_BOARD_METALIO47
         if (app_book_request_open(s_selected.path)) {

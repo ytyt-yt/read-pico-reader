@@ -143,13 +143,14 @@ void epd_draw_pixel(int x,int y,uint8_t c,uint8_t *fb){if(x<0||y<0||x>=684||y>=1
 esp_err_t nvs_open(const char *s,int m,nvs_handle_t *h){(void)s;(void)m;*h=1;return ESP_OK;}
 esp_err_t nvs_get_str(nvs_handle_t h,const char *k,char *s,size_t *n){(void)h;(void)k;if(!hidden_path)return ESP_ERR_NOT_FOUND;size_t z=strlen(hidden_path)+1;if(*n<z)return ESP_FAIL;memcpy(s,hidden_path,z);*n=z;return ESP_OK;}
 void nvs_close(nvs_handle_t h){assert(h==1);}
-esp_err_t book_store_roots(book_store_root_t *r,int *n){snprintf(r[0].path,sizeof(r[0].path),"%s/books",fixtures);*n=1;return ESP_OK;}
+esp_err_t book_store_roots(book_store_root_t r[BOOK_STORE_ROOT_MAX],int *n){snprintf(r[0].path,sizeof(r[0].path),"%s/books",fixtures);*n=1;return ESP_OK;}
 bool book_store_roots_degraded(void){return false;}
 esp_err_t book_progress_list(book_progress_visit_fn f,void *c){if(foreign_records){char path[512];snprintf(path,sizeof(path),"%s/foreign.wread",fixtures);book_progress_t value={.file_size=1,.last_open_s=1000};(void)f(path,&value,c);}return ESP_OK;}
 bool book_progress_load(const char *p,uint32_t s,book_progress_t *out){(void)s;const char *name=strrchr(p,'/');int id=atoi(name+1);out->last_open_s=100-(unsigned)id+recent_bump+(id==promoted?1000:0);return true;}
 bool book_title_from_path(const char *p,char *s,size_t n){const char *name=strrchr(p,'/');snprintf(s,n,"%s",name?name+1:p);char *ext=strrchr(s,'.');if(ext)*ext=0;return true;}
 bool pico_boot_asset_allowed(const char *p){(void)p;return true;}
 esp_err_t book_epub_cover_bounded(const char *p,uint8_t **d,size_t *n,bool *png,size_t budget){++cover_requests;FILE *book=fopen(p,"rb");if(!book)return ESP_ERR_NOT_FOUND;int id=fgetc(book);fclose(book);char path[256];snprintf(path,sizeof(path),"%s/images/%02d.raw",fixtures,id);FILE *f=fopen(path,"rb");if(!f)return ESP_ERR_NOT_FOUND;assert(!fseek(f,0,SEEK_END));*n=ftell(f);rewind(f);if(*n>budget){fclose(f);return ESP_ERR_NO_MEM;}*d=heap_caps_malloc(*n,3);if(!*d){fclose(f);return ESP_ERR_NO_MEM;}assert(fread(*d,1,*n,f)==*n);fclose(f);*png=true;return ESP_OK;}
+esp_err_t book_cbz_cover_bounded(const char *p,uint8_t **d,size_t *n,bool *png,size_t budget){return book_epub_cover_bounded(p,d,n,png,budget);}
 bool book_image_dimensions(const uint8_t *d,size_t n,bool png,unsigned *w,unsigned *h){(void)png;if(n<16)return false;uint32_t header[4];memcpy(header,d,16);*w=header[0];*h=header[1];return true;}
 bool book_image_grayscale(const uint8_t *d,size_t n,bool png,unsigned w,unsigned h,uint8_t *out){(void)png;uint32_t header[4];memcpy(header,d,16);assert(n==16+(size_t)header[2]*header[3]);++decoded;for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x)out[y*w+x]=d[16+(y*header[3]/h)*header[2]+x*header[2]/w];return true;}
 bool book_auto_cover_render(const char *p,const char *t,const char *a,unsigned w,unsigned h,uint8_t *out){(void)p;(void)t;(void)a;memset(out,200,w*h);return true;}
@@ -257,7 +258,7 @@ int main(int argc,char **argv){
            '-Wno-missing-field-initializers','-fsanitize=address,undefined','-ffunction-sections','-fdata-sections',
            '-I'+str(work),'-I'+str(ROOT/'main/book'),'-I'+str(ROOT/'main/font'),
            '-I'+str(ROOT/'main/ui'),'-I'+str(ROOT/'main'),'-I'+str(ROOT/'tools/ui_gesture_stubs')]
-    subprocess.run(flags+['-c',str(ROOT/'main/font/ttf_font.c'),'-o',str(work/'ttf.o')],check=True)
+    subprocess.run(flags+['-Wno-error=format-truncation','-c',str(ROOT/'main/font/ttf_font.c'),'-o',str(work/'ttf.o')],check=True)
     gc='-Wl,-dead_strip' if os.uname().sysname=='Darwin' else '-Wl,--gc-sections'
     subprocess.run(flags+font_hanzi_host_sources(ROOT,work)+[f'-DBOOK_LOCK_CACHE_PARENT="{work}/cache"',str(work/'test.c'),str(work/'assets.c'),
                           str(work/'ttf.o'),str(ROOT/'main/ui/ui_image_dither.c'),'-lm',gc,'-o',str(work/'test')],check=True)

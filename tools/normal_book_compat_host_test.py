@@ -43,10 +43,12 @@ static int nvs_open(const char *ns,int mode,nvs_handle_t *h){(void)ns;assert(mod
 static void nvs_close(nvs_handle_t h){assert(h==1);}
 static bool shelf_hidden_read_handle(nvs_handle_t h,const char *p){assert(h==1);(void)p;return false;}
 static bool favorite_read_handle(nvs_handle_t h,const char *p){assert(h==1);(void)p;return false;}
-static int book_progress_list(book_progress_visit_fn visit,void *ctx){for(int i=0;i<5;++i)if(!visit(records[i].path,&records[i].progress,ctx))break;return ESP_OK;}
+static int book_progress_list(book_progress_visit_fn visit,void *ctx){for(int i=0;i<5;++i)if(!visit(records[i].path,&records[i].progress,ctx))break;
+ return ESP_OK;}
 static bool book_progress_last_path(char *out,size_t cap){snprintf(out,cap,"%s",last);return *last;}
 static bool book_progress_load(const char *p,uint32_t size,book_progress_t *out){
- for(int i=0;i<5;++i)if(!strcmp(p,records[i].path)&&records[i].progress.file_size==size){*out=records[i].progress;return true;}return false;
+ for(int i=0;i<5;++i)if(!strcmp(p,records[i].path)&&records[i].progress.file_size==size){*out=records[i].progress;return true;}
+ return false;
 }
 static unsigned book_progress_revision(void){return revision;}
 static void copy_text(char *out,size_t cap,const char *s){snprintf(out,cap,"%s",s);}
@@ -64,7 +66,16 @@ static shelf_entry_t s_shelf[8];
 static int s_count,s_visible_count,s_view=0;
 enum {SHELF};
 static char s_query[65],s_latest_path[288],s_requested_open[288];
-static bool s_recent_sort=true,s_requested_open_home,s_requested_fullscreen;
+static bool s_recent_sort=true,s_requested_open_home,s_requested_fullscreen,s_requested_comic,s_requested_resume_mode;
+static bool app_settings_reader_default_fullscreen(void){return true;}
+static void shelf_added_load(void){}
+static bool book_name_from_path(const char*p,char*t,size_t n,char*a,size_t z){if(a&&z)a[0]=0;return book_title_from_path(p,t,n);}
+static bool book_author_clean_display(char *a,size_t n){(void)a;(void)n;return false;}
+static int s_requested_comic_page;
+static bool book_comics_context(const char *path,char *directory){(void)path;(void)directory;return false;}
+static int app_comics_saved_page(const char *directory){(void)directory;return -1;}
+static const char *app_settings_books_dir(void){return books_root;}
+
 typedef struct {nvs_handle_t favorites,hidden;bool truncated;} shelf_backfill_t;
 static bool shelf_reserve(void){++reserves;return s_count<8;}
 static void shelf_category_restore(app_ctx_t *ctx){(void)ctx;}
@@ -72,13 +83,12 @@ static void shelf_categories_recount(void){}
 static void sort_shelf(app_ctx_t *ctx){(void)ctx;++sorts;s_visible_count=s_count;}
 '''
 for name in ('app_book_request_open','app_book_request_open_from_home','app_book_request_resume',
-             'shelf_backfill_visit','shelf_backfill_read_books','refresh_cached_progress'):
+             'shelf_cbz_in_books','shelf_backfill_visit','shelf_backfill_read_books','refresh_cached_progress'):
     unit += function(name, reader) + '\n'
 unit += r'''
 typedef struct {char path[288],title[256],author[128];time_t modified;bool has_progress;book_progress_t progress;} home_book_t;
 static home_book_t s_current,s_recent[6];
 static home_book_t *book_at(int index){return index==0?&s_current:&s_recent[index-1];}
-static const char *app_settings_books_dir(void){return books_root;}
 static bool book_store_flash_ready(void){return false;}
 typedef struct {bool mounted;} read_pico_sd_info_t;
 static void read_pico_sd_get_info(read_pico_sd_info_t *out){out->mounted=true;}
@@ -125,7 +135,7 @@ with tempfile.TemporaryDirectory(prefix='normal-book-compat-') as directory:
         p.write_bytes(b'x')
     c, exe = tmp/'test.c', tmp/'test'
     c.write_text(unit)
-    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-variable','-Wno-unused-function','-Wno-sign-compare',
+    subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-variable','-Wno-unused-function','-Wno-sign-compare',
                     '-fsanitize=address,undefined','-I'+str(ROOT/'main/book'),str(c),'-o',str(exe)],check=True)
     for case in ['shelf','home','request']:
         result = subprocess.run([str(exe),str(tmp),case],capture_output=True,text=True)
