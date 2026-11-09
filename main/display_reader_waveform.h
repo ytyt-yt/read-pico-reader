@@ -7,8 +7,12 @@
 /// Soft text phases advance a few gray-edge settling pulses; board output selects the reading modes that use them.
 const EpdWaveform* display_reader_text_waveform(void);
 #if !KIIKO_BOARD_METALIO47
-/// Pico reading ripple retains its gray sequence plus four changed-white phases before settling.
+/// Pico原水波纹：保留37相文字序列、12相擦白、4相补黑，共53相。
+/// Original Pico ripple retains37 text phases,12 white/four black extras,53 total.
 const EpdWaveform* display_reader_water_waveform(void);
+/// Pico清晰水波纹：完整48相GL16、12相擦白、4相补黑，补足三相末尾保持，共65相。
+/// Pico Clear ripple: complete48-phase GL16,12 white/four black extras and three final holds,65 total.
+const EpdWaveform* display_reader_clear_water_waveform(void);
 #endif
 
 #include "epd_highlevel.h"

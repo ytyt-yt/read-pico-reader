@@ -52,7 +52,12 @@ int main(void){
 #endif
     for(unsigned i=0;i<sizeof(expected)/sizeof(expected[0]);++i){s_turns=100;assert(reading_settings_action(&ctx,120,639)==APP_REDRAW_PAGE);assert(full_pages==(int)expected[i]&&!s_turns);}
     full_pages=77;reading_settings_action(&ctx,120,639);assert(full_pages==(KIIKO_BOARD_METALIO47?0:5));
-    for(unsigned i=0;i<6;++i){s_turns=4;reading_settings_action(&ctx,450,639);assert(effect==(int)((i+1)%3)&&s_turns==0);}
+#if KIIKO_BOARD_METALIO47
+    const unsigned effects[]={1,2,0};
+#else
+    const unsigned effects[]={1,3,2,0};
+#endif
+    for(unsigned i=0;i<2*sizeof(effects)/sizeof(effects[0]);++i){s_turns=4;reading_settings_action(&ctx,450,639);assert(effect==(int)effects[i%(sizeof(effects)/sizeof(effects[0]))]&&s_turns==0);}
     s_reader_panel=READER_PANEL_REFRESH_SETTINGS;
     reading_settings_action(&ctx,120,743);assert(s_reader_panel==READER_PANEL_TURN_SETTINGS);
     s_reader_panel=READER_PANEL_REFRESH_SETTINGS;

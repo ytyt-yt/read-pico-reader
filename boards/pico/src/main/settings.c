@@ -20,7 +20,7 @@
 #include "settings.h"
 #include "setup_state.h"
 #include "kiiko_board_config.h"
-#define READER_TURN_EFFECT_MAX 2
+#define READER_TURN_EFFECT_MAX KIIKO_BOARD_READER_TURN_EFFECT_MAX
 #include "book/book_font_size.h"
 
 #include <stdio.h>
@@ -1130,7 +1130,9 @@ esp_err_t app_settings_backup_save(void) {
     // v15 reuses the retired shake flag for disabled AA; older backups always restore AA on.
     f[BK_SHAKE] = s_book_antialias ? 0 : 1;
     f[BK_FULL_PAGES] = s_reader_full_pages;
-    f[BK_TURN] = s_reader_turn_effect;
+    // 清晰水波纹以旧水波纹编号加预留标志保存，旧固件和S31仍可读取整个备份。
+    // Encode Clear ripple as legacy ripple plus a reserved flag so old firmware/S31 can read the backup.
+    f[BK_TURN] = s_reader_turn_effect==3 ? 1 : s_reader_turn_effect;
     f[BK_POWER_TURN] = s_reader_power_turn;
     // v22：独立入口与沉浸位，保留固定布局与旧版读取。/ Independent entry/immersion bits; retain layout and legacy decoding.
     f[BK_IMMERSIVE] = (uint8_t)s_reader_immersive + 2*(uint8_t)s_reader_default_fullscreen;
@@ -1165,6 +1167,7 @@ esp_err_t app_settings_backup_save(void) {
                                 (s_ble_turner ? 8 : 0) |
                                 (s_reader_hold_refresh ? 16 : 0) |
                                 (s_reader_vertical_turn ? 32 : 0) |
+                                (s_reader_turn_effect==3 ? 64 : 0) |
                                 (app_settings_main_fast_refresh() ? 128 : 0);
     uint32_t profile_hash = backup_profile_checksum(&backup, extension[0], extension[1], extension[2], &profile);
     for (int i = 0; i < 4; ++i) profile.checksum[i] = (uint8_t)(profile_hash >> (i * 8));
@@ -1341,7 +1344,8 @@ esp_err_t app_settings_backup_restore(void) {
                      strnlen(profile.device_name, sizeof(profile.device_name)) < sizeof(profile.device_name) &&
                      profile.device_name[0] &&
                      strnlen(profile.status_signature, sizeof(profile.status_signature)) < sizeof(profile.status_signature) &&
-                     // 位6仍忽略旧实验模式；v9 在校验扩展内保存三种主页刷新模式。/ Bit 6 still ignores the retired experiment; v9 stores all three main modes in its checked extension.
+                     // v22起预留位6可记录清晰水波纹；旧格式实验位仍忽略。
+                     // The reserved bit6 may mark Clear ripple in v22; ignore retired experiment bits in older formats.
                      backup_path_valid(profile.avatar, sizeof(profile.avatar));
             }
         }
@@ -1432,7 +1436,11 @@ esp_err_t app_settings_backup_restore(void) {
     BACKUP_SET_U8(NVS_KEY_BOOK_PX, BK_BOOK_PX);
 
     BACKUP_SET_U8(NVS_KEY_READER_FULL, BK_FULL_PAGES);
-    BACKUP_SET_U8(NVS_KEY_READER_TURN, BK_TURN);
+    // 仅v22且基础编号为水波纹时恢复清晰档；更旧备份的实验位不改变翻页模式。
+    // Restore Clear ripple only for v22/base-ripple records; older experiment bits never change the effect.
+    const uint8_t reader_turn=version>=22 && backup.flags[BK_TURN]==1 && (profile.home_full_refresh&64)
+        ? 3 : backup.flags[BK_TURN];
+    if (err == ESP_OK) err = nvs_set_u8(h,NVS_KEY_READER_TURN,reader_turn);
     BACKUP_SET_U8(NVS_KEY_POWER_TURN, BK_POWER_TURN);
     if (err == ESP_OK) err = nvs_set_u8(h,NVS_KEY_IMMERSIVE,backup.flags[BK_IMMERSIVE]&1);
     if (err == ESP_OK) err = nvs_set_u8(h,NVS_KEY_DEFAULT_FULLSCREEN,version>=22 && backup.flags[BK_IMMERSIVE]>=2);
@@ -1496,7 +1504,7 @@ esp_err_t app_settings_backup_restore(void) {
     s_book_px = f[BK_BOOK_PX];
 
     s_reader_full_pages = f[BK_FULL_PAGES];
-    s_reader_turn_effect = f[BK_TURN];
+    s_reader_turn_effect = reader_turn;
     s_reader_power_turn = f[BK_POWER_TURN];
     s_reader_immersive = (f[BK_IMMERSIVE]&1)!=0;
     s_reader_default_fullscreen = version>=22 && f[BK_IMMERSIVE]>=2;

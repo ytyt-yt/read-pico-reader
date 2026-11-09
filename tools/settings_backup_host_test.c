@@ -172,7 +172,8 @@ esp_err_t nvs_set_u8(nvs_handle_t h, const char *key, uint8_t value) {
 #ifdef NVS_KEY_PIN_GRACE
     if (!strcmp(key,NVS_KEY_PIN_GRACE)) { loaded_grace=value; has_grace=true; }
 #endif
- if(!strcmp(key,NVS_KEY_READER_TURN))loaded_turn=value; (void)h; if(test_full_storage&&!strcmp(key,NVS_KEY_READER_FULL))loaded_full_pages=value; if(!strcmp(key,NVS_KEY_BOOK_PARA)){loaded_para=value;has_para=true;} if(!strcmp(key,NVS_KEY_BOOK_TRACK)){loaded_tracking=value;has_tracking=true;} if(!strcmp(key,NVS_KEY_BOOK_WEIGHT_FINE)){loaded_fine=value;has_fine=true;} if(!strcmp(key,NVS_KEY_BOOK_AA)){loaded_aa=value;has_aa=true;} if(!strcmp(key,NVS_KEY_READER_KEYS_V2))keys_v2=value==1; if(!strcmp(key,NVS_KEY_BOOK_WEIGHT)){loaded_weight=value;has_weight=true;} if(!strcmp(key,NVS_KEY_BOOK_INDENT_ADJUST)){loaded_adjust=value;has_adjust=true;} if(!strcmp(key,NVS_KEY_SHELF_STYLE))loaded_shelf=value; if(!strcmp(key,NVS_KEY_SHELF_V22))loaded_shelf_v22=value==1; if(!strcmp(key,NVS_KEY_LOCK_STYLE))loaded_lock=value; if(!strcmp(key,NVS_KEY_HOLD_ACTION)){loaded_hold=value;has_hold=true;} for(unsigned i=0;i<3;++i) if(!strcmp(key,s_reader_key_names[i])){loaded_keys[i]=value;has_keys[i]=true;} if (!strcmp(key, NVS_KEY_MAIN_REFRESH)) {has_main_mode=true;loaded_main_mode=value;} if (!strcmp(key, "ui_fast")) test_loaded_fast=value; return ESP_OK; }
+ if(!strcmp(key,NVS_KEY_READER_TURN)) { loaded_turn=value; }
+ (void)h; if(test_full_storage&&!strcmp(key,NVS_KEY_READER_FULL))loaded_full_pages=value; if(!strcmp(key,NVS_KEY_BOOK_PARA)){loaded_para=value;has_para=true;} if(!strcmp(key,NVS_KEY_BOOK_TRACK)){loaded_tracking=value;has_tracking=true;} if(!strcmp(key,NVS_KEY_BOOK_WEIGHT_FINE)){loaded_fine=value;has_fine=true;} if(!strcmp(key,NVS_KEY_BOOK_AA)){loaded_aa=value;has_aa=true;} if(!strcmp(key,NVS_KEY_READER_KEYS_V2))keys_v2=value==1; if(!strcmp(key,NVS_KEY_BOOK_WEIGHT)){loaded_weight=value;has_weight=true;} if(!strcmp(key,NVS_KEY_BOOK_INDENT_ADJUST)){loaded_adjust=value;has_adjust=true;} if(!strcmp(key,NVS_KEY_SHELF_STYLE))loaded_shelf=value; if(!strcmp(key,NVS_KEY_SHELF_V22))loaded_shelf_v22=value==1; if(!strcmp(key,NVS_KEY_LOCK_STYLE))loaded_lock=value; if(!strcmp(key,NVS_KEY_HOLD_ACTION)){loaded_hold=value;has_hold=true;} for(unsigned i=0;i<3;++i) if(!strcmp(key,s_reader_key_names[i])){loaded_keys[i]=value;has_keys[i]=true;} if (!strcmp(key, NVS_KEY_MAIN_REFRESH)) {has_main_mode=true;loaded_main_mode=value;} if (!strcmp(key, "ui_fast")) test_loaded_fast=value; return ESP_OK; }
 esp_err_t nvs_get_str(nvs_handle_t h, const char *key, char *value, size_t *size) {
  (void)h;
  if(!strcmp(key,NVS_KEY_BOOKS_DIR)||!strcmp(key,NVS_KEY_FONTS_DIR)) {
@@ -225,13 +226,13 @@ int main(void) {
     app_settings_set_pin_grace_code(0);
     has_lock_at=false; s_pin_locked_at=0;
 #endif
-    for(int effect=0;effect<=2;++effect) {
+    for(int effect=0;effect<=READER_TURN_EFFECT_MAX;++effect) {
         loaded_turn=effect;s_reader_turn_effect=99;app_settings_init();
         assert(app_settings_reader_turn_effect()==effect);
-        app_settings_set_reader_turn_effect((effect+1)%3);
-        assert(loaded_turn==(effect+1)%3);
+        app_settings_set_reader_turn_effect((effect+1)%(READER_TURN_EFFECT_MAX+1));
+        assert(loaded_turn==(effect+1)%(READER_TURN_EFFECT_MAX+1));
         s_reader_turn_effect=99;app_settings_init();
-        assert(app_settings_reader_turn_effect()==(effect+1)%3);
+        assert(app_settings_reader_turn_effect()==(effect+1)%(READER_TURN_EFFECT_MAX+1));
     }
     loaded_turn=255;s_reader_turn_effect=0;app_settings_init();assert(!app_settings_reader_turn_effect());
     app_settings_set_reader_turn_effect(255);assert(!app_settings_reader_turn_effect());loaded_turn=-1;
@@ -392,13 +393,13 @@ int main(void) {
     assert(!strcmp(saved_profile.device_name, "Kiiko Pico") &&
            !strcmp(saved_profile.status_signature, "今天也要读书") &&
            !strcmp(saved_profile.avatar, "/sdcard/pictures/missing-avatar.jpg"));
-    assert(!(saved_profile.home_full_refresh & 64));
+    assert(!!(saved_profile.home_full_refresh & 64)==(READER_TURN_EFFECT_MAX==3));
     assert(test_loaded_fast == 1);
     assert(backup_wifi_valid(&saved_network) && saved_network.credentials.configured &&
            !strcmp(saved_network.credentials.ssid, "Home_2.4G") &&
            !strcmp(saved_network.credentials.password, "password123"));
-    // 旧备份仍可恢复，但退出的极速测试位被忽略；其他配置与网络继续恢复。
-    // Accept old backups while ignoring the retired fast-test bit; restore other settings and WiFi.
+    // 预留扩展位包含在原校验中，基础模式编号仍兼容旧固件；其他配置与网络继续恢复。
+    // Reserved extension bits remain checksummed with legacy-compatible base IDs; restore other settings/WiFi.
     saved = fopen(BACKUP_FILE, "r+b");
     settings_backup_v1_t legacy_header; uint8_t legacy_ext[7];
     assert(saved && fread(&legacy_header, 1, sizeof(legacy_header), saved) == sizeof(legacy_header));
@@ -822,11 +823,18 @@ int main(void) {
         int px=(int)old-4;if(px>15)px=15;
         assert(s_book_tracking==px-APP_BOOK_TRACK_MIN&&loaded_tracking==192+s_book_tracking);
     }
-    // 旧0/1与新2共用原备份字段，恢复和重启均保留选项。
-    // Legacy0/1 and new2 share the existing backup field and survive restore/reinitialization.
-    for(unsigned effect=0;effect<=2;++effect){
+    // 所有档位恢复和重启均保留；清晰档的基础字段仍为旧水波纹，旧固件可继续读取。
+    // Every effect survives restore/reinitialization; Clear ripple keeps a legacy-readable base ID.
+    for(unsigned effect=0;effect<=READER_TURN_EFFECT_MAX;++effect){
         app_settings_set_reader_turn_effect(effect);assert(app_settings_backup_save()==ESP_OK);
-        app_settings_set_reader_turn_effect((effect+1)%3);assert(app_settings_backup_restore()==ESP_OK);
+        FILE *encoded=fopen(BACKUP_FILE,"rb");assert(encoded);
+        settings_backup_v1_t header;uint8_t ext[7];settings_backup_profile_t profile;
+        assert(fread(&header,1,sizeof(header),encoded)==sizeof(header));
+        assert(fread(ext,1,sizeof(ext),encoded)==sizeof(ext));
+        assert(fread(&profile,1,sizeof(profile),encoded)==sizeof(profile)&&fclose(encoded)==0);
+        assert(header.flags[BK_TURN]==(effect==3?1:effect));
+        assert(!!(profile.home_full_refresh&64)==(effect==3));
+        app_settings_set_reader_turn_effect((effect+1)%(READER_TURN_EFFECT_MAX+1));assert(app_settings_backup_restore()==ESP_OK);
         assert(app_settings_reader_turn_effect()==effect);
         s_reader_turn_effect=99;app_settings_init();assert(app_settings_reader_turn_effect()==effect);
     }

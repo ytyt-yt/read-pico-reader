@@ -844,6 +844,7 @@ static const ui_locale_pair_t s_pairs[] = {
     {"添加时间","Date added"},
     {"添加翻页器","Add pager"},
     {"清晰","Clear"},
+    {"清晰水波纹","Clear ripple"},
     {"清理进度","Clear progress"},
     {"清空","Clear"},
     {"清进度","Clear progress"},
