@@ -9,6 +9,7 @@ r=Path(__file__).resolve().parents[1]
 b=r/'main/apps/app_book.c'
 u=r'''
 #include <assert.h>
+#include "ui_nav_layout.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -33,8 +34,8 @@ enum {UI_PAGER_NONE=-1,UI_PAGER_FIRST,UI_PAGER_PREVIOUS,UI_PAGER_NEXT,UI_PAGER_L
 static int leaves(void){return 5;}
 static EpdRect ui_pager_area(void){return(EpdRect){36,1006,612,50};}
 static void ui_fill_rect_fast(EpdRect a,int c,uint8_t*f){(void)c;(void)f;assert(a.x==36&&a.y==1006&&a.width==612&&a.height==50);}
-static void ui_pager_draw(uint8_t *fb,const char *label,int page,int pages,bool key_mode,int pressed){
- (void)fb;assert(page>=0&&page<pages&&pages==5&&strstr(label,"20本书"));if(key_mode)++outlines;if(pressed>=0){assert(pressed==UI_PAGER_PREVIOUS||pressed==UI_PAGER_NEXT);++presses;}
+static void ui_shelf_pager_state(uint8_t *fb,int count,int page,int pages,const char *unit,bool key_mode,int pressed){
+ (void)fb;assert(page>=0&&page<pages&&pages==5&&count==20&&!strcmp(unit,"本书"));if(key_mode)++outlines;if(pressed>=0){assert(pressed==UI_PAGER_PREVIOUS||pressed==UI_PAGER_NEXT);++presses;}
 }
 static app_redraw_t shelf_turn_page(app_ctx_t *ctx,int d){if(ctx->leaf+d<0||ctx->leaf+d>=leaves())return APP_REDRAW_NONE;ctx->leaf+=d;++turns;return APP_REDRAW_PAGE;}
 static int app_index_of(const app_desc_t *p){return p->tab;}
@@ -44,9 +45,9 @@ for n in ('draw_shelf_pager','shelf_key_paint','shelf_main_key','shelf_key_tick'
 u+=function('main_key_action',r/'main/app/app_loop.c')+'\n'
 u+=r'''
 int main(void){app_ctx_t ctx={0};
- for(int tab=0;tab<4;++tab){app_desc_t p={tab,NULL};
-  requests=-1;assert(main_key_action(&ctx,&p,UI_KEY_1,false)==APP_REDRAW_NONE&&requests==(tab+3)%4);
-  assert(main_key_action(&ctx,&p,UI_KEY_3,false)==APP_REDRAW_NONE&&requests==(tab+1)%4);
+ for(int slot=0;slot<UI_NAV_COUNT;++slot){int tab=ui_nav_page_at(slot);app_desc_t p={tab,NULL};
+  requests=-1;assert(main_key_action(&ctx,&p,UI_KEY_1,false)==APP_REDRAW_NONE&&requests==ui_nav_page_at((slot+UI_NAV_COUNT-1)%UI_NAV_COUNT));
+  assert(main_key_action(&ctx,&p,UI_KEY_3,false)==APP_REDRAW_NONE&&requests==ui_nav_page_at((slot+1)%UI_NAV_COUNT));
   requests=-1;assert(main_key_action(&ctx,&p,UI_KEY_2,true)==APP_REDRAW_FULL&&requests==-1);
  }
  app_desc_t shelf={1,shelf_main_key};requests=-1;
@@ -69,10 +70,10 @@ int main(void){app_ctx_t ctx={0};
  ctx.request_app=NULL;main_key_action(&ctx,&shelf,UI_KEY_2,false);main_key_action(&ctx,&shelf,UI_KEY_1,false);
  main_key_action(&ctx,&shelf,UI_KEY_2,false);assert(!s_shelf_key_mode&&!s_shelf_key_delta);
  s_view=9;app_redraw_t redraw;assert(!shelf_main_key(&ctx,UI_KEY_2,&redraw));
- puts("PASS: four-root cycling/wrap, shared middle-hold full refresh, shelf mode chevron-only contours and local pressed arrows, queued rapid turns, opposite cancellation, boundary consumption and navigation/subpage interruption");
+ puts("PASS: five-root cycling/wrap, shared middle-hold full refresh, shelf mode chevron-only contours and local pressed arrows, queued rapid turns, opposite cancellation, boundary consumption and navigation/subpage interruption");
 }
 '''
 with tempfile.TemporaryDirectory() as d:
  p=Path(d)/'test.c';p.write_text(u);out=p.with_suffix('')
- subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(p),'-o',str(out)],check=True)
+ subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I'+str(r/'main/ui'),str(p),'-o',str(out)],check=True)
  subprocess.run([str(out)],check=True)

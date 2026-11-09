@@ -14,6 +14,8 @@ bool book_image_grayscale(const uint8_t *data, size_t size, bool png,
                           unsigned out_width, unsigned out_height, uint8_t *out);
 bool book_image_dimensions(const uint8_t *data, size_t size, bool png,
                            unsigned *width, unsigned *height);
+/// 检查 WebP RIFF 签名；旧 png 参数仅是 PNG/JPEG 提示。/ Check the WebP RIFF signature; the legacy PNG argument remains a PNG/JPEG hint.
+bool book_image_is_webp(const uint8_t *data, size_t size);
 
 /// 源图取样窗口，按「填满目标再居中裁剪」计算。
 /// 长宽比不同时按长边铺满、裁掉多余的一边，绝不拉伸。
@@ -31,6 +33,9 @@ book_crop_t book_cover_crop(unsigned src_width, unsigned src_height,
 bool book_cover_load_gray(const char *path, const char *title, const char *author,
                           uint8_t out[BOOK_COVER_W * BOOK_COVER_H],
                           bool allow_decode, bool *pending);
+/// 预制漫画封面与来源身份，用于内存及磁盘缓存失效；不打开CBZ。
+/// Prepared comic-cover/source fingerprint for memory and disk invalidation, without opening CBZ.
+uint64_t book_cover_source_fingerprint(const char *path);
 
 // TF 图片按文件流解码；输入最多 50 MiB，输出仍限制为一屏。/ Stream TF images up to 50 MiB, with a one-screen output bound.
 #define BOOK_IMAGE_FILE_MAX (50u * 1024u * 1024u)

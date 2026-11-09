@@ -30,6 +30,8 @@
  * Lost media stops and joins reception and clears capacity/QR; never switch storage beneath an active request.
  * Provisioning lists and confirmation keep the main tabs active; the password editor keeps its input actions, and connected STA persists after exit.
  * Navigation waits for an active upload; USB exit disconnects the host before local remount.
+ * 用户要求 CBZ 漫画：书籍入口与管理同时识别 .cbz，沿用现有生命周期与存储限制。
+ * User requests CBZ comics: book entry/management also accept .cbz, retaining lifecycle and storage limits.
  */
 #ifdef ESP_PLATFORM
 #include "ui_locale_format.h"
@@ -108,7 +110,7 @@ static esp_err_t transfer_signature_set(const char *text) {
 
 static bool transfer_book_file(const char *path) {
     const char *ext = strrchr(path, '.');
-    return ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt"));
+    return ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".txt") || !strcasecmp(ext, ".cbz"));
 }
 
 static void transfer_file_deleted(const char *path) {
@@ -249,7 +251,7 @@ static void draw_methods(uint8_t *fb) {
         ui_fill_round_rect(fb, (EpdRect){36, 478, 612, 76}, 20, 0xd8);
         ui_text_vc(fb, 342, 516, 20, s_method_message, EPD_DRAW_ALIGN_CENTER, false);
     }
-    ui_text(fb, 42, 594, 19, "浏览器传书支持 EPUB、TXT、字体和图片文件。", EPD_DRAW_ALIGN_LEFT, false);
+    ui_text(fb, 42, 594, 19, "浏览器传书支持 EPUB、TXT、CBZ、字体和图片文件。", EPD_DRAW_ALIGN_LEFT, false);
     ui_text(fb, 42, 634, 18, "传输完成后，新内容会自动出现在书架或字体列表。", EPD_DRAW_ALIGN_LEFT, false);
     transfer_navigation(fb,2);
 }
@@ -784,7 +786,7 @@ static void render_content(app_ctx_t* ctx, uint8_t* fb) {
         ui_text(fb, 42, 450, 20, "文件存放位置", EPD_DRAW_ALIGN_LEFT, false);
         ui_fill_round_rect(fb, (EpdRect){36, 478, 612, 206}, 24, UI_GRAY_WHITE);
         ui_text(fb, 64, 510, 27, "books", EPD_DRAW_ALIGN_LEFT, false);
-        ui_text(fb, 64, 553, 19, "EPUB、TXT 书籍", EPD_DRAW_ALIGN_LEFT, false);
+        ui_text(fb, 64, 553, 19, "EPUB、TXT、CBZ 书籍", EPD_DRAW_ALIGN_LEFT, false);
         ui_hairline(fb, 580, 64, 556, 0xb0);
         ui_text(fb, 64, 597, 27, "fonts", EPD_DRAW_ALIGN_LEFT, false);
         ui_text(fb, 64, 640, 19, "TTF、OTF 字体", EPD_DRAW_ALIGN_LEFT, false);

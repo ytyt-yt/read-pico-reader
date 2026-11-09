@@ -51,7 +51,8 @@ static void reference(EpdRect rect){if(style==6)ui_draw_liquid_shelf_rail(saved,
 int main(int argc,char **argv){
  if(argc==3){
   rotation=1;style=6;fast=false;FILE *in=fopen(argv[1],"rb");assert(in);memset(frame,255,BYTES);
-  for(int y=0;y<1216;++y)for(int x=0;x<684;++x){int c=fgetc(in);assert(c>=0);epd_draw_pixel(x,y,(uint8_t)c,frame);}assert(fgetc(in)==EOF);fclose(in);
+  for(int y=0;y<1216;++y)for(int x=0;x<684;++x){int c=fgetc(in);assert(c>=0);epd_draw_pixel(x,y,(uint8_t)c,frame);}
+  assert(fgetc(in)==EOF);fclose(in);
   for(int row=0;row<3;++row)draw_shelf_guard(frame,(EpdRect){20,192+row*282+188,644,42},row);
   FILE *out=fopen(argv[2],"wb");assert(out);
   for(int y=0;y<1216;++y)for(int x=0;x<684;++x)assert(fputc(ui_read_pixel(frame,x,y)*17,out)!=EOF);

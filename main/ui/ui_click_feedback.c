@@ -45,7 +45,7 @@ void ui_click_feedback_reset(void) {
     s_nav.tab=-1;s_nav.phase=0;s_nav.due=0;s_nav.dirty=(EpdRect){0};
 }
 void ui_click_feedback_begin(uint8_t *fb) {
-    // 四主页共用完全相同的图标底色，保留这一个小控件原像素，切页后仍能准确复位。
+    // 主页面共用完全相同的图标底色，保留这一个小控件原像素，切页后仍能准确复位。
     // Main roots share identical icon backgrounds; retain this one control baseline so it settles correctly after navigation.
     if(s_pixels&&s_active.kind==UI_CLICK_NAV&&ui_click_feedback_nav_pending()&&fb==s_frame) {
         restore_pixels(fb);s_count=0;return;
@@ -99,7 +99,7 @@ bool ui_click_feedback_release(uint8_t *fb, EpdRect *area) {
 bool ui_click_feedback_cancel_at(int x, int y) {
     bool outside = s_active.kind == UI_CLICK_NAV
         ? x < 0 || x >= UI_LOCK_WIDTH || y < UI_NAV_TOUCH_TOP || y >= UI_LOCK_HEIGHT ||
-          x / (UI_LOCK_WIDTH / 4) != s_x / (UI_LOCK_WIDTH / 4)
+          ui_nav_slot_at(x,UI_LOCK_WIDTH) != ui_nav_slot_at(s_x,UI_LOCK_WIDTH)
         : x < s_active.area.x || x >= s_active.area.x + s_active.area.width ||
           y < s_active.area.y || y >= s_active.area.y + s_active.area.height;
     return s_pixels && (outside ||
@@ -112,7 +112,7 @@ bool ui_click_feedback_press(uint8_t *fb, int x, int y, EpdRect *area) {
         EpdRect r = s_controls[i].area;
         bool hit = s_controls[i].kind == UI_CLICK_NAV
             ? y >= UI_NAV_TOUCH_TOP && y < UI_LOCK_HEIGHT && x >= 0 && x < UI_LOCK_WIDTH &&
-              x / (UI_LOCK_WIDTH / 4) == (r.x + r.width / 2) / (UI_LOCK_WIDTH / 4)
+              ui_nav_slot_at(x,UI_LOCK_WIDTH) == ui_nav_slot_at(r.x+r.width/2,UI_LOCK_WIDTH)
             : x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
         if (!hit) continue;
         s_pixels = heap_caps_malloc((size_t)r.width * r.height, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -147,7 +147,7 @@ bool ui_click_feedback_press(uint8_t *fb, int x, int y, EpdRect *area) {
 // 还原单次放大/复位反馈；新点击优先，连点同一图标用轻微尺寸差避免被差分吞掉。
 // Restore one enlargement/settle; new contacts win and a small repeated-tap variation prevents identical-frame skips.
 void ui_click_feedback_nav_request(int tab) {
-    if(tab<0||tab>=4)return;
+    if(!ui_nav_page_valid(tab))return;
     bool accent=s_nav.tab==tab&&s_pixels ? !s_nav.accent : false;
     if(s_pixels) {
         if(s_active.kind==UI_CLICK_NAV)s_nav.dirty=nav_union(s_nav.dirty,changed_area(s_frame));
@@ -177,14 +177,15 @@ bool ui_click_feedback_nav_tick(uint8_t *fb,int64_t now_ms,EpdRect *area) {
     if(s_nav.phase==0) {
         click_control_t *control=NULL;
         for(unsigned i=0;i<s_count;++i)if(s_controls[i].kind==UI_CLICK_NAV&&
-            (s_controls[i].area.x+s_controls[i].area.width/2)/(UI_LOCK_WIDTH/4)==s_nav.tab) {
+            ui_nav_page_at(ui_nav_slot_at(s_controls[i].area.x+s_controls[i].area.width/2,UI_LOCK_WIDTH))==s_nav.tab) {
             control=&s_controls[i];break;
         }
         // 书架正等待封面时新帧尚未注册底栏；按稳定公共布局反馈，不能等待目标页出现。
         // While shelf covers load, the new frame may lack registrations; use the stable common footer immediately.
-        static const ui_icon_t tabs[]={UI_ICON_HOUSE,UI_ICON_LIBRARY_BIG,UI_ICON_FOLDER_OPEN,UI_ICON_SLIDERS_HORIZONTAL};
-        int center=(s_nav.tab*2+1)*UI_LOCK_WIDTH/8;
-        s_active=control?*control:(click_control_t){(EpdRect){center-30,UI_NAV_TOP+15,60,60},UI_CLICK_NAV,tabs[s_nav.tab]};
+        static const ui_icon_t tabs[]={UI_ICON_HOUSE,UI_ICON_LIBRARY_BIG,UI_ICON_BOOK_OPEN,UI_ICON_FOLDER_OPEN,UI_ICON_SLIDERS_HORIZONTAL};
+        int slot=ui_nav_slot_for(s_nav.tab);
+        int center=(slot*2+1)*UI_LOCK_WIDTH/(2*UI_NAV_COUNT);
+        s_active=control?*control:(click_control_t){(EpdRect){center-30,UI_NAV_TOP+15,60,60},UI_CLICK_NAV,tabs[slot]};
         EpdRect r=s_active.area;
         s_pixels=heap_caps_malloc((size_t)r.width*r.height,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
         if(!s_pixels) {

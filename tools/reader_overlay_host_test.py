@@ -31,6 +31,9 @@ static char log_buf[128];
 #define ESP_LOGI(tag,...) ((void)(tag),(void)snprintf(log_buf,sizeof(log_buf),__VA_ARGS__))
 enum {READER_PANEL_NONE,READER_PANEL_TOOLS,READER_PANEL_BACKGROUND_PREVIEW,READER_PANEL_SETTINGS};
 typedef enum {APP_REDRAW_NONE,APP_REDRAW_DONE} app_redraw_t;
+#define BOOK_KIND_CBZ 2
+static int book_kind(void){return 0;}
+static void book_comic_cache_pause(void){}
 typedef struct {uint8_t *fb;void *hl;int64_t now_ms;} app_ctx_t;
 static bool s_reader_fullscreen,immersive,vertical,s_reader_favorite,s_zoom_active;
 static size_t s_page=1;
@@ -58,8 +61,8 @@ static void ui_reader_background_paint(uint8_t *fb,EpdRect r,bool overlay){(void
 static void draw_reader_images(uint8_t *fb,size_t page,EpdRect r){(void)page;ui_fill_rect_fast(r,85,fb);}
 static char note_text[601];static const char *s_text=note_text;static size_t s_text_len=600,s_note_count=1;
 static int s_footnote_note=-1;static EpdRect s_footnote_marker,note_card;
-typedef struct{size_t text_start,text_len;} html_note_t;
-static html_note_t note={0,600},*s_notes=&note;
+typedef struct{size_t text_start,text_len;char *owned_text;} html_note_t;
+static html_note_t note={.text_len=600},*s_notes=&note;
 static int note_lines,note_x[24],note_y[24];
 static int ttf_text_width_px(int px,const char *text){(void)text;return px/2;}
 static int ttf_ascender_px(int px){return px*3/4;}

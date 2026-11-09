@@ -32,6 +32,7 @@ static int mapped_remove(const char *p){char a[1024];map(p,a);return remove(a);}
 #define mkdir mapped_mkdir
 #define rename mapped_rename
 #define remove mapped_remove
+static uint64_t book_cover_source_fingerprint(const char *path){(void)path;return 0;}
 static bool book_title_from_path(const char *p,char *out,size_t cap){(void)p;snprintf(out,cap,"canonical");return true;}
 typedef struct {unsigned width,height,stride,contrast,phase;} book_fast_cover_key_t;
 '''

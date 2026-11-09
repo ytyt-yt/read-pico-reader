@@ -2,14 +2,15 @@
  * SPDX-FileCopyrightText: 2026 mindreset
  * SPDX-License-Identifier: Apache-2.0
  *
- * 产品页清单。四个主页面对应底部导航；传输由文件首页的直达按钮进入，工厂页独立。
+ * 产品页清单。五个主页面对应底部导航，编号保持兼容；传输由文件首页进入。
  *
- * Product page table. Four main pages match the tab bar; file-home buttons open transfer directly.
+ * Product page table. Five main tabs retain compatible IDs; file-home buttons open transfer.
  */
 
 #include "app_registry.h"
 
 extern const app_desc_t app_book;
+extern const app_desc_t app_comics;
 extern const app_desc_t app_image;
 extern const app_desc_t app_dashboard;
 extern const app_desc_t app_files;
@@ -23,6 +24,7 @@ static const app_desc_t* const s_apps[] = {
     &app_files,
     &app_device_settings,
     &app_image,
+    &app_comics,
 };
 
 #define APP_COUNT ((int)(sizeof(s_apps) / sizeof(s_apps[0])))

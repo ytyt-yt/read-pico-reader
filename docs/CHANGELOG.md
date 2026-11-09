@@ -1,5 +1,14 @@
 # 版本变更 / Changelog
 
+## 本地测试 / Local test — 2026-11-09
+
+- 漫画适配当前Pico/S31双板构建，WebP复用共享解码器并保留可取消灰阶预解码。
+  Comics support the current Pico/S31 builds, sharing one WebP decoder with cancellable grayscale predecode.
+- 漫画书架新增液态玻璃样式，阅读沿用默认全屏偏好、当前缩放和本板刷新范围，页脚显示CBZ内页码。
+  Comics add liquid-glass shelves and retain fullscreen preferences, current zoom and board refresh bounds, with CBZ page positions in the footer.
+- S31睡眠前关闭漫画双归档句柄，唤醒拒绝变化文件，预解码缓存恢复失败回退同步阅读。
+  S31 suspends both comic archives before sleep, rejects changed files on wake and falls back to synchronous reading if predecode recovery fails.
+
 ## 本地测试 / Local test — 2026-11-06
 
 - S31 屏幕修复加强：盲刷黑白从 3 个清屏循环提高到 12 个（4 轮 × 每轮 10 黑 + 13 白 + 3 收尾相），收尾再连做 3 次完整 48 相 GC16 全刷，耗时约 5-7 秒，用于清顽固残影。
@@ -802,6 +811,18 @@ User-visible changes by release; see [README](../README.md) for usage.
 
 ## 0.3.3-rc91 / 2026-10-12
 
+- 同版本本地开发：新增独立漫画tab与两层TF目录、三种共用书架样式、当前层搜索、整部章节目录及双向跨CBZ阅读；普通书架保留TXT/EPUB与书目录内CBZ，独立comics目录由漫画页管理；旧CBZ文件/进度可直接打开。预制灰阶封面优先直读，增删替换使灰阶/快刷缓存失效，附电脑批量制作工具。
+  Same-version local development: independent two-level comic shelves, three shared styles, layer search, series TOC and bidirectional chapter reading; the ordinary shelf retains TXT/EPUB and book-root CBZ while the Comics tab owns its separate directory; legacy CBZ remains directly readable. Prepared gray covers bypass archive extraction, invalidate both caches on edits, and include a desktop batch tool.
+- 本地开发（沿用 rc91，未发布）：增加 CBZ 漫画，支持静态 WebP/JPEG/PNG、自然页序、首图封面与逐页续读；书架、文件管理及 WiFi/热点传书同步识别。
+  Local development on rc91 (unpublished): CBZ comics with static WebP/JPEG/PNG, natural page order, first-page covers and resume; integrated shelf, Files and web transfer.
+- 同版本本地优化：漫画居中，图片头尺寸缓存，取消重复整图读取，增加有界相邻页预解码与原生行绘制，减少逐页进度提交；扫描、锁屏、离页与拔卡前汇合后台。
+  Same-version local optimization: center comics, cache dimensions, avoid full rereads, predecode bounded adjacent pages, paint native rows and batch progress, joining background work before scan/lock/exit/media cleanup.
+- 同版本本地修复：漫画、插图及混排页实际使用已选的灰阶水波纹翻页，跨章与反向翻页一致，保留周期全刷和失败恢复。
+  Same-version local fix: comics, illustrations and mixed pages use the selected grayscale ripple, including chapter changes and reverse turns, with cleanup and failure recovery retained.
+- 同版本本地修复：水波纹将正文与进度区合并输出，取消动画后进度条二次扫描，保持进度外观、排版、完整灰阶相位及全刷/失败恢复。
+  Same-version local fix: ripple presents body and progress together, removing the second progress scan while retaining artwork, layout, complete gray phases, cleanup and recovery.
+- 同版本本地优化：同尺寸、不透明且非交错的8位灰阶PNG直接解码到显示位图，省去RGB转换与逐像素缩放，保留原灰阶像素。
+  Same-version local optimization: matching opaque, noninterlaced 8-bit grayscale PNG decodes directly into the bitmap, skipping RGB conversion and pixel scaling while retaining source tones.
 - 合入 PR #24、#25，支持 EPUB 内嵌 TTF/OpenType 字体，修复开书与关闭书内字体的栈溢出，减少大型章节索引和多字体缓存占用。
   Include PR #24/#25 for embedded EPUB faces, stack safety and bounded index/glyph memory.
 - 阅读新增五档字重和抗锯齿开关；重排字体与阅读设置，中键长按默认返回首页，底部上滑始终打开工具栏。

@@ -1,4 +1,11 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * SPDX-FileCopyrightText: 2026 mindreset
+ * SPDX-License-Identifier: Apache-2.0
+ * 中文：有界灰阶图像解码和共享封面缓存，漫画优先严格预制PNG。
+ * English: Bounded grayscale decode and shared cover caches; comics prefer strict prepared PNG.
+ * 冻结：有效176×240不透明8位非交错灰阶封面直接读像素，不提取CBZ；文件变化使两种缓存失效。
+ * Frozen: Valid 176x240 opaque 8-bit noninterlaced gray covers read directly without CBZ extraction; source changes invalidate both caches.
+ */
 #include "book_cover.h"
 #if KIIKO_BOARD_METALIO47
 #include "metalio_cover_cache.h"
@@ -9,6 +16,10 @@
 #endif
 #include "book_cover_auto.h"
 #include "book_epub.h"
+#include "book_cbz.h"
+#include "book_comics.h"
+#include "book_webp.h"
+#include "zip_reader.h"
 #include "book_title.h"
 #include <errno.h>
 #include <setjmp.h>
@@ -765,7 +776,7 @@ static void png_read_mem(png_structp png, png_bytep dst, png_size_t count) {
 }
 static bool png_gray_rows(const uint8_t *data, size_t size, FILE *file, unsigned out_width,
                      unsigned out_height, uint8_t *out, uint8_t *alpha,
-                     bool (*sink)(void *, unsigned, unsigned, const uint8_t *, const uint8_t *), void *context) {
+                     bool (*sink)(void *, unsigned, unsigned, const uint8_t *, const uint8_t *), void *context, bool prepared) {
     png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!png) return false;
     png_infop info = png_create_info_struct(png);
@@ -792,6 +803,23 @@ static bool png_gray_rows(const uint8_t *data, size_t size, FILE *file, unsigned
     if (!width || !height || width > 8192 || height > 8192 ||
         png_get_interlace_type(png, info) != PNG_INTERLACE_NONE) goto done;
     int color = png_get_color_type(png, info), depth = png_get_bit_depth(png, info);
+    if (prepared && (color != PNG_COLOR_TYPE_GRAY || depth != 8 || width != BOOK_COVER_W ||
+        height != BOOK_COVER_H || png_get_valid(png, info, PNG_INFO_tRNS) ||
+        png_get_interlace_type(png, info) != PNG_INTERLACE_NONE)) goto done;
+    // 电脑预处理的同尺寸不透明灰阶直接读入目标，保留与通用路径完全相同的像素。
+    // Read opaque, preprocessed grayscale at matching dimensions directly, preserving generic-path pixels.
+    if (!keep_alpha && color == PNG_COLOR_TYPE_GRAY && depth == 8 && width == out_width && height == out_height &&
+        !png_get_valid(png, info, PNG_INFO_tRNS) && png_get_interlace_type(png, info) == PNG_INTERLACE_NONE) {
+        png_read_update_info(png, info);
+        if (png_get_rowbytes(png, info) != out_width) goto done;
+        for (unsigned y = 0; y < out_height; ++y) {
+            png_read_row(png, out + (size_t)y * out_width, NULL);
+            decode_yield(y);
+        }
+        png_read_end(png, NULL);
+        ok = true;
+        goto done;
+    }
     if (depth == 16) png_set_strip_16(png);
     if (color == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png);
     if (color == PNG_COLOR_TYPE_GRAY && depth < 8) png_set_expand_gray_1_2_4_to_8(png);
@@ -868,7 +896,7 @@ done:
 
 static bool png_gray_input(const uint8_t *data, size_t size, FILE *file, unsigned width,
                           unsigned height, uint8_t *out, uint8_t *alpha) {
-    return png_gray_rows(data, size, file, width, height, out, alpha, NULL, NULL);
+    return png_gray_rows(data, size, file, width, height, out, alpha, NULL, NULL, false);
 }
 
 bool book_cover_thumbnail(const uint8_t *data, size_t size, bool png,
@@ -883,7 +911,7 @@ bool book_image_grayscale(const uint8_t *data, size_t size, bool png,
         return false;
     // 格式按签名分派：WebP 的 png 标记为 false，不能落进 JPEG 分支。
     // Dispatch on the signature: WebP arrives with png=false and must not fall into JPEG.
-    if (book_webp_is(data, size)) return webp_gray(data, size, out_width, out_height, out);
+    if (book_webp_is(data, size)) return book_webp_grayscale(data, size, out_width, out_height, out);
     if (book_gif_is(data, size)) return gif_gray(data, size, out_width, out_height, out);
     return png ? png_gray_input(data, size, NULL, out_width, out_height, out, NULL)
                : jpeg_gray(data, size, out_width, out_height, out);
@@ -914,12 +942,55 @@ static uint64_t cover_hash(uint64_t hash, const char *text) {
     return (hash ^ 0xffu) * UINT64_C(1099511628211);
 }
 
+uint64_t book_cover_source_fingerprint(const char *source) {
+    char primary[BOOK_STORE_PATH_MAX], secondary[BOOK_STORE_PATH_MAX], cbz[BOOK_STORE_PATH_MAX];
+    if (!book_comics_cover_sources(source, primary, secondary, cbz)) return 0;
+    uint64_t hash = UINT64_C(14695981039346656037);
+    const char *paths[] = {primary, secondary, cbz};
+    for (unsigned i = 0; i < 3; ++i) {
+        hash = cover_hash(hash, paths[i]);
+        struct stat st;
+        if (!paths[i][0] || stat(paths[i], &st) || !S_ISREG(st.st_mode) || st.st_size < 0) continue;
+        char identity[80];
+        snprintf(identity, sizeof(identity), "%llu:%lld", (unsigned long long)st.st_size, (long long)st.st_mtime);
+        hash = cover_hash(hash, identity);
+        // 小封面取内容指纹，覆盖同秒同大小替换；归档只stat，不读取页数据。
+        // Hash small covers to catch same-second same-size replacements; archives use stat without page reads.
+        if (i < 2 && st.st_size <= 512 * 1024) {
+            FILE *file = fopen(paths[i], "rb");
+            if (!file) { hash ^= 1; continue; }
+            uint8_t bytes[256]; size_t n;
+            while ((n = fread(bytes, 1, sizeof(bytes), file)))
+                for (size_t j = 0; j < n; ++j) hash = (hash ^ bytes[j]) * UINT64_C(1099511628211);
+            if (ferror(file)) hash ^= 1;
+            fclose(file);
+        }
+    }
+    return hash;
+}
+static bool prepared_comic_cover(const char *source, uint8_t *out, char cbz[BOOK_STORE_PATH_MAX]) {
+    char primary[BOOK_STORE_PATH_MAX], secondary[BOOK_STORE_PATH_MAX];
+    if (!book_comics_cover_sources(source, primary, secondary, cbz)) return false;
+    const char *paths[] = {primary, secondary};
+    for (unsigned i = 0; i < 2; ++i) {
+        struct stat st;
+        if (!paths[i][0] || stat(paths[i], &st) || !S_ISREG(st.st_mode) || st.st_size < 0 || st.st_size > 512 * 1024) continue;
+        FILE *file = fopen(paths[i], "rb");
+        if (!file) continue;
+        bool ok = png_gray_rows(NULL, (size_t)st.st_size, file, BOOK_COVER_W, BOOK_COVER_H, out, NULL, NULL, NULL, true);
+        fclose(file);
+        if (ok) return true;
+    }
+    return false;
+}
+
 static bool cover_cache_key(const char *source, const char *title, const char *author,
                             char *path, size_t cap, cover_cache_header_t *header) {
     struct stat st;
-    if (stat(source, &st) || !S_ISREG(st.st_mode) || st.st_size < 0) return false;
+    if (stat(source, &st) || (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode)) || st.st_size < 0) return false;
     uint64_t path_hash = cover_hash(UINT64_C(14695981039346656037), source);
     uint64_t text_hash = cover_hash(cover_hash(UINT64_C(14695981039346656037), title), author);
+    text_hash ^= book_cover_source_fingerprint(source);
     *header = (cover_cache_header_t){
         .magic = COVER_CACHE_MAGIC, .schema = COVER_CACHE_SCHEMA,
         .template_version = BOOK_AUTO_COVER_VERSION,
@@ -1016,17 +1087,21 @@ static bool book_cover_load_gray_impl(const char *path, const char *title, const
 #endif
     if (!allow_decode) { if (pending) *pending = true; return false; }
 
-    bool good = false;
+    char comic_source[BOOK_STORE_PATH_MAX] = "";
+    bool good = prepared_comic_cover(path, out, comic_source);
     bool auto_used = false;
     bool cache_result = true;
-    const char *ext = strrchr(path, '.');
-    if (ext && !strcasecmp(ext, ".epub")) {
+    const char *image_source = comic_source[0] ? comic_source : path;
+    const char *ext = strrchr(image_source, '.');
+    if (!good && ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".cbz"))) {
         uint8_t *data = NULL;
         size_t size = 0;
         bool png = false;
         size_t free_bytes=heap_caps_get_free_size(MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
         size_t budget=free_bytes>2u*1024u*1024u?free_bytes-2u*1024u*1024u:0;
-        esp_err_t err = budget ? book_epub_cover_bounded(path,&data,&size,&png,budget) : ESP_ERR_NO_MEM;
+        esp_err_t err = !budget ? ESP_ERR_NO_MEM : !strcasecmp(ext, ".cbz")
+            ? book_cbz_cover_bounded(image_source, &data, &size, &png, budget < ZIP_OUTPUT_MAX ? budget : ZIP_OUTPUT_MAX)
+            : book_epub_cover_bounded(path, &data, &size, &png, budget);
         if (err == ESP_OK) good = book_cover_thumbnail(data, size, png, out);
 #ifdef ESP_PLATFORM
         else ESP_LOGW("cover", "epub cover fail %s err=%d", path, (int)err);
@@ -1044,7 +1119,8 @@ static bool book_cover_load_gray_impl(const char *path, const char *title, const
 #endif
         }
         free(data);
-        if (err == ESP_ERR_NO_MEM) cache_result = false;
+        if (err == ESP_ERR_NO_MEM || (!strcasecmp(ext, ".cbz") && err == ESP_OK && !good))
+            cache_result = false;
     }
     if (!good && !allow_auto) { if(pending)*pending=true;if(auto_cache)*auto_cache=cache_result;return false; }
     if (!good) { good = book_auto_cover_render(path, title, author, BOOK_COVER_W, BOOK_COVER_H, out); auto_used = good; }
@@ -1074,6 +1150,9 @@ static bool book_cover_load_list_gray_impl(const char *path, const char *title, 
     if (pending) *pending = false;
     if (!path || !out || !width || !height) return false;
     *width = BOOK_COVER_W; *height = BOOK_COVER_H;
+    char primary[BOOK_STORE_PATH_MAX], secondary[BOOK_STORE_PATH_MAX], cbz[BOOK_STORE_PATH_MAX];
+    if (book_comics_cover_sources(path, primary, secondary, cbz))
+        return book_cover_load_gray_impl(path, title, author, out, allow_decode, pending, allow_auto, auto_cache);
     char canonical[256], cache_path[120];
     if (book_title_from_path(path, canonical, sizeof(canonical))) title = canonical;
     if (!title || !*title) return false;
@@ -1127,12 +1206,14 @@ static bool book_cover_load_list_gray_impl(const char *path, const char *title, 
     if (!allow_decode) { if (pending) *pending = true; return false; }
     bool good = false, cacheable = true, auto_used = false;
     const char *ext = strrchr(path, '.');
-    if (ext && !strcasecmp(ext, ".epub")) {
+    if (ext && (!strcasecmp(ext, ".epub") || !strcasecmp(ext, ".cbz"))) {
         uint8_t *data = NULL; size_t size = 0; bool png = false;
         size_t available = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         size_t budget = available > 1536u*1024u ? available - 1536u*1024u : 0;
         if (budget > 4u*1024u*1024u) budget = 4u*1024u*1024u;
-        esp_err_t error = budget ? book_epub_cover_bounded(path, &data, &size, &png, budget) : ESP_ERR_NO_MEM;
+        esp_err_t error = !budget ? ESP_ERR_NO_MEM : !strcasecmp(ext, ".cbz")
+            ? book_cbz_cover_bounded(path, &data, &size, &png, budget)
+            : book_epub_cover_bounded(path, &data, &size, &png, budget);
 #ifdef ESP_PLATFORM
         if (error != ESP_OK) ESP_LOGW("cover", "epub cover fail(list) %s err=%d", path, (int)error);
 #endif
@@ -1599,7 +1680,7 @@ bool book_png_file_layer_rows(const char *path, unsigned width, unsigned height,
         stat(path, &st) || st.st_size <= 0 || (uint64_t)st.st_size > BOOK_IMAGE_FILE_MAX) return false;
     FILE *file = fopen(path, "rb");
     if (!file) return false;
-    bool ok = png_gray_rows(NULL, (size_t)st.st_size, file, width, height, NULL, NULL, sink, context);
+    bool ok = png_gray_rows(NULL, (size_t)st.st_size, file, width, height, NULL, NULL, sink, context, false);
     fclose(file);
     return ok;
 }

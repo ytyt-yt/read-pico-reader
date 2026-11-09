@@ -20,6 +20,8 @@ void epd_draw_circle(int x,int y,int radius,uint8_t color,uint8_t *fb);
 #include <stddef.h>
 typedef int esp_err_t;
 #define ESP_OK 0
+#define BOOK_KIND_CBZ 2
+int book_kind(void);
 esp_err_t book_navigation_title(size_t position, char *out, size_t cap);
 size_t book_navigation_chapter(size_t position);
 typedef struct {size_t begin,end,title;unsigned number;} book_volume_t;
@@ -65,6 +67,7 @@ static int cards;
 static int labels;
 static int large_titles,skip_labels,jump_summary,borders,pager_labels,jump_labels;
 static size_t nav_shift,seen_sources[8];
+int book_kind(void){return 0;}
 static int seen_count;
 static int title_fits,title_draws,selected_titles,white_titles;
 void epd_fill_rect(EpdRect rect,uint8_t color,uint8_t *fb){(void)rect;(void)color;(void)fb;}

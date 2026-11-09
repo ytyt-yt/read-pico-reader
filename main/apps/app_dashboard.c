@@ -32,6 +32,8 @@
  * User revision: Kehai seconds hold unchanged face pixels to avoid rectangular gray-background flashes; fast mode drives binary dot differences only.
  * 用户修订：首页题头与书架、文件和设置共用左侧起点、顶边及52px名义字号，仍使用当前系统字体。
  * User revision: Home's title matches the shelf/files/settings left edge, top and nominal 52px size in the active system face.
+ * 用户要求 CBZ 漫画：书籍入口与管理同时识别 .cbz，沿用现有生命周期与存储限制。
+ * User requests CBZ comics: book entry/management also accept .cbz, retaining lifecycle and storage limits.
  */
 #include <dirent.h>
 #include <stdio.h>
@@ -52,6 +54,7 @@
 #else
 #endif
 #include "book_cover_jobs.h"
+#include "book_comics.h"
 #include "ui_image_dither.h"
 #include "book_epub.h"
 #include "book_progress.h"
@@ -101,6 +104,7 @@ typedef struct {
     char author[128];
     off_t size;
     time_t modified;
+    uint64_t cover_fingerprint;
     uint8_t *pixels;
     bool fast;
     uint16_t width,height;
@@ -192,6 +196,15 @@ static void copy_title(char *dst, size_t cap, const char *src) {
 }
 
 static void title_for(home_book_t *item) {
+    char directory[BOOK_STORE_PATH_MAX];
+    if (book_comics_context(item->path, directory)) {
+        const char *chapter = strrchr(item->path, '/') + 1;
+        char name[256]; copy_title(name, sizeof(name), chapter);
+        char *ext = strrchr(name, '.'); if (ext) *ext = 0;
+        copy_title(item->title, sizeof(item->title), strrchr(directory, '/') + 1);
+        copy_title(item->author, sizeof(item->author), name);
+        return;
+    }
     if (!book_name_from_path(item->path, item->title, sizeof(item->title),item->author,sizeof(item->author)))
         copy_title(item->title, sizeof(item->title), "未命名");
 }
@@ -333,7 +346,8 @@ static void restore_cover_cache(void) {
             home_cover_cache_t *cached = &s_cover_cache[j];
             if (used[j] || !cached->pixels || strcmp(book->path, cached->path) ||
                 strcmp(book->title, cached->title) || strcmp(book->author, cached->author) ||
-                st.st_size != cached->size || st.st_mtime != cached->modified) continue;
+                st.st_size != cached->size || st.st_mtime != cached->modified ||
+                cached->cover_fingerprint != book_cover_source_fingerprint(book->path)) continue;
             match[i] = j;
             used[j] = true;
             break;
@@ -388,6 +402,7 @@ static bool load_cover(home_book_t *item,int slot) {
     cached->size=result.size;cached->modified=result.modified;cached->pixels=result.pixels;
     cached->fast=result.fast;cached->width=result.width;cached->height=result.height;
     item->cover=result.pixels;item->cover_fast=result.fast;item->cover_width=result.width;item->cover_height=result.height;
+    cached->cover_fingerprint=result.source_fingerprint;
     return true;
 }
 

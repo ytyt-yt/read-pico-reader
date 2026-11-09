@@ -24,6 +24,9 @@ static size_t s_page=2,s_page_images_for=2;
 static uint32_t s_page_images_generation=3,generation=3;
 static reader_image_t *s_page_images;static bool s_zoom_active;
 static int s_zoom_slot;
+#define BOOK_KIND_CBZ 2
+static int source_kind;
+static int book_kind(void){return source_kind;}
 static bool app_settings_reader_hide_images(void){return hidden;}
 static uint32_t book_layout_generation(void){return generation;}
 static int book_layout_page_image(size_t page){(void)page;return slots==1?0:-1;}
@@ -38,7 +41,7 @@ static bool reader_image_slot(size_t p,int s,int*i,int*y,int*w,int*h){
 static const uint8_t s_bayer4[16]={0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
 #define ZOOM_BITS_STEP 1
 '''
-for name in ('reader_sqrt','reader_image_cache_ready','reader_single_image_page',
+for name in ('reader_images_hidden','reader_sqrt','reader_image_cache_ready','reader_single_image_page',
              'reader_zoom_image','reader_zoom_mode','reader_inline_image_at','reader_page_image_hit',
              'reader_image_clamp_center','reader_sample_bilinear','reader_logical_to_phys',
              'reader_phys_to_logical','zoom_bits_build','zoom_blit_bits'):
@@ -68,6 +71,8 @@ int main(void){
  s_view=READING;s_toolbar=hidden=false;s_page_image_count=1;
  slots=20;assert(!reader_inline_image_at(0,15,&slot)); // 布局槽多于实际缓存。/ Layout outnumbers decoded slots.
  slots=1;
+ source_kind=BOOK_KIND_CBZ;hidden=true;assert(reader_zoom_mode());
+ source_kind=0;assert(!reader_zoom_mode());hidden=false;
  assert(reader_sample_bilinear(&image,0,0)==0);
  assert(reader_sample_bilinear(&image,1<<16,0)==255);
  assert(reader_sample_bilinear(&image,1<<15,0)==127);

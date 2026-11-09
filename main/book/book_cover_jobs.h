@@ -20,6 +20,8 @@ typedef struct {
     bool fast,white_edge;
     off_t size;
     int64_t modified;
+    /// 预制漫画封面与归档的联合指纹。/ Combined fingerprint of prepared comic covers and archives.
+    uint64_t source_fingerprint;
 } book_cover_result_t;
 /// 新页面代次取消旧结果；切页无需等待解码。/ A new page generation discards stale results without joining a decoder.
 unsigned book_cover_jobs_begin(void);

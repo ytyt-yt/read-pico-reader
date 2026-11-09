@@ -28,6 +28,8 @@
  * 用户修订：纯文字水波纹复用柔和文字序列，保持未变灰边、减轻先粗后浅；8带/11090us、最终灰阶、主页水波纹和故障恢复保持。
  * User revision: pure-text ripple reuses soft text phases to hold unchanged grays and reduce dark-edge transients; retain eight bands/11090us, target grays, main ripple and fault recovery.
 
+ * 用户新增图片水波纹：图片使用完整灰阶序列，文字保留main柔和序列；共用127行预装与故障恢复。
+ * Image ripple retains full gray phases while text keeps main soft phases; share 127-line prefill and fault recovery.
  */
 
 #include "display.h"
@@ -949,6 +951,17 @@ enum EpdDrawError update_display_area_full_with(
     bool held = pico_online_display_begin();
     enum EpdDrawError result = display_needs_full()
         ? update_display_full_unlocked(hl) : update_display_area_full_with_unlocked(hl, waveform, mode, area);
+    pico_online_display_end(held);
+    LATENCY_DISPLAY_END();
+    return result;
+}
+
+enum EpdDrawError update_display_image_turn(EpdiyHighlevelState* hl, EpdRect area,
+                                            e0470_turn_dir_t dir) {
+    LATENCY_DISPLAY_BEGIN();
+    bool held = pico_online_display_begin();
+    enum EpdDrawError result = display_needs_full() ? update_display_full_unlocked(hl)
+        : update_display_reader_turn_unlocked(hl, area, dir, E0470_TURN_FAST_BANDS, &E0470_WAVEFORM);
     pico_online_display_end(held);
     LATENCY_DISPLAY_END();
     return result;

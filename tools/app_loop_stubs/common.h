@@ -20,9 +20,8 @@ typedef struct { int unused; } EpdiyHighlevelState;
 typedef struct { int x,y,width,height; } EpdRect;
 enum EpdDrawError { EPD_DRAW_SUCCESS };
 enum EpdFontFlags { EPD_DRAW_ALIGN_LEFT, EPD_DRAW_ALIGN_CENTER, EPD_DRAW_ALIGN_RIGHT };
-#define MODE_DU 1
-#define MODE_GL16 2
-#define MODE_GC16 3
+typedef int EpdWaveform;
+enum EpdDrawMode {MODE_DU=1,MODE_GL16=2,MODE_GC16=3};
 extern int E0470_WAVEFORM;
 extern int E0470_FOLLOW_WAVEFORM;
 bool continuous_du_init(void);

@@ -101,6 +101,9 @@ static bool app_settings_reader_power_turn(void){return true;}
 static bool app_settings_reader_default_fullscreen(void){return true;}
 static bool app_settings_reader_immersive(void){return false;}
 static bool app_settings_reader_hide_images(void){return false;}
+#define BOOK_KIND_CBZ 2
+static int book_kind(void){return 0;}
+static bool reader_images_hidden(void){return app_settings_reader_hide_images();}
 '''
 unit+=function('ui_text_box',kit).replace('void ui_text_box(', 'static void actual_text_box(')+'\n'
 unit+=r'''

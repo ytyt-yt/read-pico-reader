@@ -129,7 +129,8 @@ int main(void){
  copy_text(s_chapter_jump_digits,sizeof(s_chapter_jump_digits),"00032");assert(reader_chapter_jump_parse(&page)&&page==31);
  tap(&ctx,31);assert(!strcmp(s_chapter_jump_digits,"0003")&&!s_chapter_jump_error);
  tap(&ctx,29);assert(!s_chapter_jump_digits[0]);
- for(int i=0;i<50;++i)tap(&ctx,28);assert(strlen(s_chapter_jump_digits)==sizeof(s_chapter_jump_digits)-1);
+ for(int i=0;i<50;++i){tap(&ctx,28);}
+ assert(strlen(s_chapter_jump_digits)==sizeof(s_chapter_jump_digits)-1);
  tap(&ctx,32);assert(s_reader_panel==READER_PANEL_STATS&&s_page==6&&!saves);
  s_chapter_jump_page=0;assert(tap(&ctx,2)==APP_REDRAW_NONE&&s_chapter_jump_page==0);
  s_chapter_jump_page=31;assert(tap(&ctx,4)==APP_REDRAW_NONE&&s_chapter_jump_page==31);

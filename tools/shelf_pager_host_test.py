@@ -31,7 +31,7 @@ static unsigned haptics;
 int metalio_haptic_click(void){++haptics;return 0;}
 static unsigned prepares,renders,paints;static int remembered;
 static int shelf_rows(void){return rows;}
-static int book_navigation_count(void){return 0;}
+static int reader_toc_count(void){return 0;}
 static int book_toc_pages(int count){(void)count;return 1;}
 static void shelf_category_remember(app_ctx_t *ctx){remembered=ctx->leaf;}
 static void prepare_covers(app_ctx_t *ctx){(void)ctx;++prepares;}
@@ -40,7 +40,9 @@ static void ui_fill_rect_fast(EpdRect rect,int color,uint8_t *fb){(void)fb;asser
 static void ui_pager_draw(uint8_t *fb,const char *label,int page,int pages,bool key_mode,int pressed){
  (void)fb;(void)key_mode;assert(strstr(label,"本书")&&page>=0&&page<pages&&pressed>=-1&&pressed<4);++paints;
 }
-'''+gesture+'\n'
+'''
+u+=function('ui_shelf_pager_state',R/'main/ui/ui_shelf.c')+'\n'
+u+=gesture+'\n'
 u+=re.search(r'enum \{ UI_PAGER_NONE=[^}]+\};',header)[0]+'\n'
 for macro in ['UI_TOUCH_SLOP_PX','UI_SWIPE_MIN_PX','UI_LONG_PRESS_MS']:
  u+=re.search(r'^#define '+macro+r' .*',header,re.M)[0]+'\n'

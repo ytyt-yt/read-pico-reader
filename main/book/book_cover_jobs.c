@@ -47,9 +47,11 @@ static bool current(unsigned generation) {
 }
 static void prepare(cover_job_slot_t *job,unsigned generation) {
     book_cover_job_t *q=&job->request;unsigned sw=BOOK_COVER_W,sh=BOOK_COVER_H;
-    struct stat st;if(!current(generation)||stat(q->path,&st)||!S_ISREG(st.st_mode))return;
-    if(job->automatic&&(job->result.size!=st.st_size||job->result.modified!=st.st_mtime))return;
-    job->result.size=st.st_size;job->result.modified=st.st_mtime;
+    struct stat st;if(!current(generation)||stat(q->path,&st)||(!S_ISREG(st.st_mode)&&!S_ISDIR(st.st_mode)))return;
+    const uint64_t fingerprint=book_cover_source_fingerprint(q->path);
+    if(job->automatic&&(job->result.size!=st.st_size||job->result.modified!=st.st_mtime||
+       job->result.source_fingerprint!=fingerprint))return;
+    job->result.size=st.st_size;job->result.modified=st.st_mtime;job->result.source_fingerprint=fingerprint;
     if(!job->automatic&&q->fast&&(!q->natural||book_cover_list_cache_dimensions(q->path,q->title,q->author,&sw,&sh))){
         if(q->natural){q->width=sw;q->height=sh;q->stride=(sw+7)/8;}
         size_t bytes=(size_t)q->stride*q->height;
@@ -102,7 +104,8 @@ static void prepare(cover_job_slot_t *job,unsigned generation) {
 ready:
     job->result.width=q->width;job->result.height=q->height;
     struct stat after;
-    if(stat(q->path,&after)||after.st_size!=st.st_size||after.st_mtime!=st.st_mtime){free(job->result.pixels);job->result.pixels=NULL;}
+    if(stat(q->path,&after)||after.st_size!=st.st_size||after.st_mtime!=st.st_mtime||
+       book_cover_source_fingerprint(q->path)!=fingerprint){free(job->result.pixels);job->result.pixels=NULL;}
 }
 static void worker(void *unused) {
     (void)unused;

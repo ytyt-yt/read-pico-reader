@@ -99,7 +99,7 @@ static EpdRect s_area;
 static int64_t esp_timer_get_time(void){return 1000;}
 static bool ui_reader_background_prepare(const char *p){(void)p;return true;}
 static void prepare_inline_image(void){}
-static bool app_settings_reader_hide_images(void){return false;}
+static bool reader_images_hidden(void){return false;}
 static int book_layout_page_image_count(int p){(void)p;return 0;}
 static size_t fb_bytes(void){return sizeof(fb);}
 static void draw_reader(uint8_t *f,int p){(void)f;(void)p;assert(false);}

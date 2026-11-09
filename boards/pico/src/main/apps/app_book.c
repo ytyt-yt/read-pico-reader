@@ -15,6 +15,8 @@
  * 预渲染与同步推屏重叠、按行可停；推屏返回前交还字体与章节资源。
  * 用户2026-10-29对齐已合PR54：普通/图文一次整屏真实差分，等灰保持，只为变白像素补四相；手动/周期清理仍原完整GC16。
  * User parity 2026-10-29: PR54 ordinary/image turns use one panel-wide true difference, equal-gray holds and four changed-white phases; retain complete native GC16 cleanup.
+ * 漫画空闲预解码只读独立归档，不使用TTF。
+ * Idle comic predecode reads its independent archive without TTF.
  * 用户修订：阅读手动与周期全刷恢复 rc90 的原表 GC16 目标页输出，不先擦白再补文字。
  * User revision: restore rc90's original-table GC16 target-page output for manual and periodic refresh, without a white pre-clear and text pass.
  * 用户2026-10-21修订：Pico进入阅读页单次完整GC16清理；普通文字翻页保留校准GL16前导擦除及等灰保持，沿用预读；进度按最新要求在空闲时独立局刷。
@@ -44,12 +46,13 @@
  * User2026-11-01 approves the preview: management uses search, shelf order, list/grid and four-way paging; Select or hold reveals circular marks and four footer actions; Back first leaves selection. Paging/sort/view retain marks; applied search clears them.
  * 失败进度仅按变更路径失效；删除后的清理重试保留到本次开机结束，不随切页释放。
  * 卡失效时先保存进度并关闭阅读资源，再由主循环回退字体；禁止自动续读失效挂载。
- * 用户最新修订：书架保留深色书轨、亚克力及新增液态玻璃，每页九本；收录导入及读过的书，移出仅隐藏，再读重新上架。
- * 底栏保留首页/书架/文件/设置，设置直接进入设置页。
+ * 用户最新修订：书架保留深色书轨、亚克力及液态玻璃，每页九本；收录导入及读过的书，移出仅隐藏，再读重新上架。
+ * 用户修订兼容旧漫画：底栏保留五栏；普通书架收录TXT/EPUB及书目录内CBZ，独立comics目录仍由漫画页管理。
+ * 用户统一样式：标题按钮、翻页控件和内容几何由ui_shelf共用，漫画跟随当前书架。
  * 用户修订：长按图书可用本机拼音输入编辑书名；阅读时长与翻页真实记录，供票根锁屏使用。
  * 用户最新修订：书名编辑可点选插入位置并用左右键微调，支持在文字中间插入和删除。
  * 用户授权新输入法：书名和搜索共用九宫格/全键盘、中英文及离线词语候选，不改正文排版。
- * 用户修订：首页、书架、文件、设置四栏导航；切换界面采用 GL16，章节首页单独排标题。
+ * 用户修订：首页、书架、漫画、文件、设置五栏导航；切换界面采用 GL16，章节首页单独排标题。
  * 用户修订：EPUB 章节首页以书内目录标题为准，正文题头仅在相同时折叠，避免引言误判。
  * 用户2026-10-23确认：阅读统计内增加本章页码跳转，减/加逐页预选、数字键盘确认，跳转后短暂提供返回原位置。
  * User approval 2026-10-23: chapter page jumping in reading statistics, stepwise drafts and numeric confirmation, with a short-lived return anchor.
@@ -84,6 +87,10 @@
  * User authorizes a separate S31 text-ripple experiment on2026-10-20: four target levels/22 phases/eight bands with a paired tail and fused footer and GC48 within ten turns. Regular builds, main pages, images and manual cleanup retain their paths.
  * 用户随后要求借鉴原厂普通阅读的干净过渡：普通字缘仍保留16级，仅跳过本次所有像素都保持的前导相，不裁有效脉冲。
  * The user then requests clean vendor-like ordinary turns: retain16-level text targets, omitting only actual all-hold leading phases without trimming active pulses.
+ * 用户要求采用PR17的快速水波纹，并最新指定8条带、每拍11090us；每次显式设置，结束恢复先前节拍，避免影响主页动画。最新修订：漫画及含图页面也使用真实灰阶水波纹，全刷和失败恢复优先。
+ * User requests PR17 fast ripple with 8 bands at 11090us, restoring pacing afterward. Latest revision: comics and illustrated pages also use real grayscale ripple; cleanup and failure recovery retain priority.
+ * 本次按用户要求升级main：漫画采用板级图像波形与当前正文裁剪；Pico信息栏沿用空闲局刷，手动/周期全刷保持优先。
+ * User-requested main integration: comics use board image waveforms and the current body crop; Pico metadata retains idle partial updates, with manual/periodic cleanup taking priority.
  * 用户增加管理/导入按压态：复用现有抬起确认流程，按下灰底加深并下沉2px，只推按钮区域。
  * User adds management/import feedback: retain release-confirmed actions, darken and depress controls 2px on press, presenting only their region.
  * 用户修订：快刷封面保留轻量减黑并按最新要求略增黑点密度，在PSRAM缓存最多九张1位缩略图（约40KiB）；进度未改变时不重复丢弃封面。缓存只画封面，收藏与界面文字实时绘制，开书或卡失效时释放。
@@ -104,6 +111,7 @@
  * User revision: input refreshes changed regions without repainting headers, covers or body; release lookup caches on exit.
  * Shake is off by default: left/right impulses turn back/forward, suppressing touch and rebound; exit restores the sensor and sleeps it. Render only paints.
  * Prefetch overlaps synchronous output and stops between rows; no font/chapter resources survive presentation.
+ * Idle comic predecode reads its independent archive without TTF.
  * Ordinary turns refresh only body and footer; manual and periodic ghost cleanup refresh the entire screen.
  * User revision: center body double taps always toggle full screen; single taps use halves or upper 1/3/lower 2/3 independently of key mappings.
  * Short key actions are configurable with two presets; middle holds are configurable and default to home. The reader has no bottom-right menu icon.
@@ -111,13 +119,14 @@
  * User revision: single-book actions use a shelf dialog; full management is for batches. Paging/sorting preserve selection; filtering/applied search and rescanning clear it.
  * Invalidate failed progress only for changed paths; retain deletion cleanup retries across page exits for this boot.
  * Lost media saves progress and closes reader resources before global font fallback; never auto-resume an invalid mount.
- * Latest user revision: the retained grid styles including liquid glass hold nine imported or read books; retired styles restore as acrylic, and removal hides until reread.
- * The fourth tab opens Settings directly.
+ * Latest user revision: the retained grid styles including liquid glass hold nine imported or read books; removal hides until reread.
+ * User revises legacy comic compatibility: keep five tabs; the ordinary shelf includes TXT/EPUB and CBZ within book roots, while Comics owns its separate directory.
+ * User unifies styling: ui_shelf shares header buttons, paging controls and content geometry so Comics follows the current shelf.
  * User revision: book details lead to an on-device Pinyin title editor; measured reading time and turns feed the ticket lock face.
  * Latest user revision: the title editor can place and move an insertion caret for edits in the middle of text.
  * 用户统一修订：书名与搜索采用共用常亮光标；点文字或箭头定位，按系统字体测量。
  * User-wide revision: title/search share a steady caret, text/arrow positioning and system-font measurement.
- * User revision: home, shelf, files and settings have four-tab navigation; view changes use GL16 and chapter starts have a title lead.
+ * User revision: home, shelf, comics, files and settings have five-tab navigation; view changes use GL16 and chapter starts have a title lead.
  * User revision: EPUB chapter leads use navigation titles; body headings are folded only when matching, preventing front matter from being mislabeled.
  * User revision: the reader bar is rounded without protruding ticks; continue reading displays the latest cover.
  * User revision: the shelf retains its title layout, reads a complete cached page before painting, and reveals cold artwork only after the page is prepared.
@@ -133,6 +142,16 @@
  * Latest user revision: book/chapter titles reuse the current reader face at the original 32/48px; Home uses its active system face, never retaining both fonts.
  * 用户确认：题头下拉选择 books 子目录，各类别/布局记住页码；去掉题头横线，主体在确认位置基础上下移8px。
  * User approval: choose books subfolders in the title menu, retain per-category/layout pages, remove the header rule and lower the approved body by 8px.
+ * 用户要求 CBZ 漫画：书籍入口与管理同时识别 .cbz，沿用现有生命周期与存储限制。
+ * User requests CBZ comics: book entry/management also accept .cbz, retaining lifecycle and storage limits.
+ * 漫画每图一页，保持比例；文本边距与关闭插图不作用于漫画，进度显示漫画页码。
+ * Comics use one aspect-preserved image per page; text margins/image hiding do not apply, and progress shows comic page numbers.
+ * 用户优化漫画处理：复用尺寸和两张相邻灰阶缓存，空闲预解码独立归档；推屏、锁屏与关闭前取消并汇合。
+ * User optimizes comic processing: reuse dimensions and two adjacent gray caches, predecode an independent archive while idle, cancel/join before presentation, lock or close.
+ * 漫画在阅读区水平垂直居中；翻页进度采用文字页的八页批次，锁屏和退出仍立即保存。
+ * Center comics on both axes in the reading area; checkpoint turns in eight-page batches like text, preserving immediate lock/exit saves.
+ * 用户授权独立漫画上下文：手动开章续读，双向跨CBZ保存并进入首/末页，目录显示整部章节，普通返回章节页。
+ * User-authorized comic context: manual chapters resume, bidirectional CBZ boundaries save then enter first/last pages, TOC lists series chapters and Back returns to chapters.
  */
 #ifdef ESP_PLATFORM
 #include "ui_locale_format.h"
@@ -160,6 +179,7 @@
 #include "book_layout.h"
 #include "book_cover.h"
 #include "book_cover_jobs.h"
+#include "book_comic_cache.h"
 #include "book_lock_collage.h"
 #include "book_epub.h"
 #include "book_policy.h"
@@ -198,11 +218,14 @@
 #include "ui_text_input.h"
 #include "ui_keyboard.h"
 #include "ui_image_dither.h"
+#include "ui_comic_image.h"
 #include "ui_reader_background.h"
 #include "ui_gesture.h"
 #include "continuous_du.h"
 #include "ui_menu.h"
 #include "ui_nav.h"
+#include "ui_shelf.h"
+#include "book_comics.h"
 #include "ui_click_feedback.h"
 #include "app_transfer_mode.h"
 
@@ -270,12 +293,21 @@ static bool s_reader_turn_pending;
 // 只记录成功推屏的纯正文基准，避免跨章或退出插图时误用文字波形。
 // Track only successfully presented text-only bodies, protecting chapter and image transitions.
 static bool s_reader_text_frame;
+// 水波纹接受成功显示的文字与图片正文；面板和失败输出不能作其基准。
+// Ripple accepts successfully presented text/image bodies, excluding panels and failed output.
+static bool s_reader_body_frame;
 static char s_requested_open[BOOK_STORE_PATH_MAX];
 static bool s_requested_open_home;
 static bool s_requested_fullscreen = false;
 static bool s_requested_resume_mode;
 static bool s_reader_return_home;
 static bool s_requested_manage;
+static char s_comic_directory[BOOK_STORE_PATH_MAX];
+static book_comic_catalog_t s_comic_catalog;
+static size_t s_comic_index = SIZE_MAX;
+static int s_comic_return_page, s_requested_comic_page = -1;
+static bool s_comic_active, s_requested_comic;
+static int s_comic_open_position;
 static shelf_entry_t* s_shelf;
 static struct {
     int index;
@@ -452,6 +484,9 @@ static reader_image_t *s_page_images;
 static int s_page_image_count;
 static size_t s_page_images_for = SIZE_MAX;
 static uint32_t s_page_images_generation;
+static size_t s_page_images_chapter = SIZE_MAX;
+static EpdRect s_page_images_band;
+static int s_comic_direction = 1;
 static size_t s_block_count;
 static size_t s_text_len, s_chapter, s_page;
 // 整页插图的双指缩放：1000 为原始大小；缩放与位置只属于当时那一页，换页自动还原。
@@ -550,6 +585,9 @@ static void prepare_inline_image(void);
 static void release_page_images(void);
 static void sort_shelf(app_ctx_t* ctx);
 static void prepare_covers(app_ctx_t* ctx);
+static app_redraw_t comic_return(app_ctx_t *ctx, const char *message);
+static bool comic_open_chapter(app_ctx_t *ctx, size_t index, int position);
+static size_t reader_toc_count(void) { return s_comic_active ? s_comic_catalog.count : book_navigation_count(); }
 static app_redraw_t toggle_reader_fullscreen(app_ctx_t* ctx);
 bool app_book_request_open(const char* path) {
     if (!path || !path[0] || strnlen(path, sizeof(s_requested_open)) >= sizeof(s_requested_open)) return false;
@@ -558,6 +596,13 @@ bool app_book_request_open(const char* path) {
     s_requested_open_home = false;
     s_requested_fullscreen = app_settings_reader_default_fullscreen();
     s_requested_resume_mode = false;
+    s_requested_comic = book_comics_context(path, NULL);
+    s_requested_comic_page = -1;
+    return true;
+}
+bool app_book_request_comic(const char *path, int chapter_page) {
+    if (!book_comics_context(path, NULL) || !app_book_request_open(path)) return false;
+    s_requested_comic_page = chapter_page < 0 ? 0 : chapter_page;
     return true;
 }
 bool app_book_request_open_from_home(const char* path) {
@@ -569,6 +614,8 @@ bool app_book_request_resume(const char *path, bool fullscreen) {
     if (!app_book_request_open_from_home(path)) return false;
     s_requested_fullscreen = fullscreen;
     s_requested_resume_mode = true;
+    char directory[BOOK_STORE_PATH_MAX];
+    if (book_comics_context(path, directory)) s_requested_comic_page = app_comics_saved_page(directory);
     return true;
 }
 bool app_book_resume_context(char *path, size_t capacity, bool *fullscreen) {
@@ -599,6 +646,9 @@ static void draw_control(uint8_t* fb, EpdRect rect, const char* label, int id) {
 }
 static void lock_draw(void) { if (s_draw_lock) xSemaphoreTake(s_draw_lock, portMAX_DELAY); }
 static void unlock_draw(void) { if (s_draw_lock) xSemaphoreGive(s_draw_lock); }
+static bool reader_images_hidden(void) {
+    return book_kind() != BOOK_KIND_CBZ && app_settings_reader_hide_images();
+}
 static size_t fb_bytes(void) { return (size_t)epd_width() * epd_height() / 2; }
 // 新书非全屏保留系统题头与工具栏；全屏状态独立于持久化沉浸样式。
 // New books retain status/header/tools; fullscreen state is independent of the persistent immersive style.
@@ -621,6 +671,7 @@ static EpdRect reader_area(void) { return ui_reader_area(s_reader_fullscreen,app
 static int reader_image_top(void) { return ui_reader_area(true,app_settings_reader_immersive()).y; }
 static EpdRect reader_fullscreen_progress_area(void) { return ui_reader_fullscreen_footer(); }
 static EpdRect body_rect_for_tracking(int tracking_index) {
+    if (book_kind() == BOOK_KIND_CBZ) return reader_area();
     (void)tracking_index;
     return ui_reader_body(s_reader_fullscreen,app_settings_reader_immersive(),s_margin,app_settings_book_vertical());
 }
@@ -720,12 +771,11 @@ static void draw_shelf_guard(uint8_t *fb,EpdRect rect,int slot) {
     } else for(int y=0;y<p.height;++y)memcpy(fb+(size_t)(p.y+y)*stride+p.x/2,output+(size_t)y*span,span);
 }
 static EpdRect row_rect(int row) {
-    if (s_view == SHELF && app_settings_shelf_style() == 5)
-        return (EpdRect){36, 184 + row * 197, 612, 197};
+    if (s_view == SHELF) return ui_shelf_row(app_settings_shelf_style(), row);
     if (s_view != BULK) {
         int col = row % 3, line = row / 3;
         int cell = (ui_content_width() - 2 * UI_GAP) / 3;
-        return (EpdRect){UI_MARGIN + col * (cell + UI_GAP), (s_view == SHELF ? 192 : 224) + line * 282, cell, 260};
+        return (EpdRect){UI_MARGIN + col * (cell + UI_GAP), 224 + line * 282, cell, 260};
     }
     return ui_book_manage_entry(s_bulk_grid,row);
 }
@@ -1034,16 +1084,12 @@ static void draw_shelf_cover(uint8_t* fb, EpdRect card, int row, const char* nam
     }
     ui_fill_rect_fast(image, UI_GRAY_LIGHT, fb);
     if (artwork && app_settings_main_fast_refresh() && s_view==SHELF && fast_cover_matches(row,image)) {
-        ui_blit_mono_bitmap(fb,image,s_covers[row].fast_bits,SHELF_FAST_COVER_STRIDE);
+        ui_shelf_cover_pixels(fb, image, NULL, 0, 0, s_covers[row].fast_bits, true);
     } else if (artwork && s_covers[row].gray) {
-
-        const uint8_t *gray = s_covers[row].gray;
-        // 封面缓冲是 176×240、这一格是 164×214；按长边铺满 + 居中裁剪，避免被压扁。
-        // The cover buffer is 176x240 and this frame is 164x214; fill by the longer side and
-        // centre-crop so the artwork is not squashed.
-        const unsigned frame_width = (unsigned)image.width, frame_height = (unsigned)image.height;
         unsigned sw = s_view == SHELF && app_settings_shelf_style() == 5 ? s_covers[row].width : BOOK_COVER_W;
         unsigned sh = s_view == SHELF && app_settings_shelf_style() == 5 ? s_covers[row].height : BOOK_COVER_H;
+        const uint8_t *gray = s_covers[row].gray;
+        const unsigned frame_width = (unsigned)image.width, frame_height = (unsigned)image.height;
         const book_crop_t crop = book_cover_crop(sw, sh, frame_width, frame_height);
         unsigned sample_x[SHELF_FAST_COVER_WIDTH];
         uint8_t tones[256];
@@ -1102,45 +1148,12 @@ static EpdRect paint_list_cover_feedback(app_ctx_t *ctx, int row) {
         draw_shelf_cover(ctx->fb, card, row, s_shelf[index].name, s_shelf[index].favorite);
     return area;
 }
-static void draw_list_title(uint8_t *fb, const char *name, int top) {
-    char lines[2][128] = {{0}};
-    int px = ttf_em_height_px(27);
-    const unsigned char *at = (const unsigned char *)name;
-    for (int line = 0; line < 2 && *at; ++line) {
-        size_t used = 0;
-        while (*at && used < sizeof(lines[line])-5) {
-            unsigned n = *at < 128 ? 1 : (*at & 0xe0)==0xc0 ? 2 : (*at & 0xf0)==0xe0 ? 3 : 4;
-            if (strlen((const char *)at) < n) break;
-            memcpy(lines[line]+used, at, n); lines[line][used+n] = 0;
-            if (ui_text_fixed_width_px(px, lines[line]) > 378) { lines[line][used] = 0; break; }
-            used += n; at += n;
-        }
-        if (line == 1 && *at) fit_text(lines[line], px, 352);
-        ui_text_fixed_vc(fb, 244, top + line*35, px, lines[line], EPD_DRAW_ALIGN_LEFT, false);
-    }
-}
 static void draw_list_row(uint8_t *fb, int row, const shelf_entry_t *item) {
-    EpdRect card = row_rect(row);
-    draw_list_title(fb, item->name, card.y + 42);
-    char author[128]; copy_text(author, sizeof(author), item->author[0] ? item->author : "作者未知");
-    int author_px = ttf_em_height_px(21), progress_px = ttf_em_height_px(19);
-    fit_text(author, author_px, 378);
-    int author_y = ui_text_fixed_width_px(ttf_em_height_px(27), item->name) > 378 ? 106 : 83;
-    ui_text_fixed_ink_vc(fb, 244, card.y + author_y, author_px, author, EPD_DRAW_ALIGN_LEFT, 0x60);
     unsigned progress = item->has_progress ? item->pct : 0;
     if (progress > 100) progress = 100;
     char label[48]; snprintf(label, sizeof(label), progress == 100 ? "已读完 · %u%%" :
                               progress ? "已读 %u%%" : "未开始 · %u%%", progress);
-    ui_text_fixed_vc(fb, 244, card.y + 143, progress_px, label, EPD_DRAW_ALIGN_LEFT, false);
-    EpdRect bar = {244, card.y + 163, 378, 11};
-    ui_fill_round_rect(fb, bar, 5, 0xd0);
-    if (progress) {
-        EpdRect fill = bar; fill.width = bar.width * progress / 100;
-        if (fill.width < 1) fill.width = 1;
-        ui_fill_round_rect(fb, fill, 5, 0x40);
-    }
-    ui_draw_control_frame(fb, bar, 5, 0x50);
-    if (row < 3) ui_draw_separator(fb, card.y + 196, 50, 584, 0x60);
+    ui_shelf_list_details_at(fb, row_rect(row), row, item->name, item->author[0] ? item->author : "作者未知", progress, label);
 }
 static void draw_shelf_furniture(uint8_t* fb) {
     uint8_t style = app_settings_shelf_style();
@@ -1165,31 +1178,25 @@ static EpdRect tool_rect(int i) {
     return (EpdRect){x0, 1096, x1 - x0, 120};
 }
 static int leaves(void) {
-    if (s_view == TOC) return book_toc_pages(book_navigation_count());
+    if (s_view == TOC) return book_toc_pages(reader_toc_count());
     int count = s_visible_count;
     int rows = shelf_rows();
     return count ? 1 + (count - 1) / rows : 1;
 }
-static EpdRect shelf_manage_rect(void) { return (EpdRect){442, 94, 97, 54}; }
-static EpdRect shelf_import_rect(void) { return (EpdRect){551, 94, 97, 54}; }
+static EpdRect shelf_manage_rect(void) { return ui_shelf_header_rect(0); }
+static EpdRect shelf_import_rect(void) { return ui_shelf_header_rect(1); }
 static void draw_shelf_header_button(uint8_t *fb, EpdRect r, bool importing) {
     bool pressed = s_pressed_control == (importing ? 115 : 114);
-    ui_fill_round_rect(fb, r, 18, UI_GRAY_WHITE);
-    ui_draw_control_frame(fb, r, 18, 0x70);
-    if (pressed) ui_draw_pressed_round_rect(fb, r, 18);
-    ui_text_vc(fb, r.x + r.width / 2, r.y + r.height / 2 + (pressed ? 2 : 0), 20,
-               importing ? "+ 导入" : "管理", EPD_DRAW_ALIGN_CENTER, false);
+    ui_shelf_header_button(fb, r, importing ? "+ 导入" : "管理", pressed);
 }
 static EpdRect shelf_page_arrow_rect(int direction) {
     return ui_pager_rect(direction<0?UI_PAGER_PREVIOUS:UI_PAGER_NEXT);
 }
 static void draw_shelf_pager(uint8_t *fb, int count, int page, int pages) {
-    char label[64];
-    snprintf(label, sizeof(label), "%d本书 · %02d/%02d", count, page + 1, pages);
     int pressed=s_shelf_key_mode&&s_shelf_key_pressed?
         (s_shelf_key_pressed<0?UI_PAGER_PREVIOUS:UI_PAGER_NEXT):UI_PAGER_NONE;
     if(s_pressed_control>=116&&s_pressed_control<=119)pressed=s_pressed_control-116;
-    ui_pager_draw(fb,label,page,pages,s_shelf_key_mode,pressed);
+    ui_shelf_pager_state(fb,count,page,pages,"本书",s_shelf_key_mode,pressed);
 }
 // 只推分页小区；按压不重绘封面，翻页在下一轮输入后执行，可被切页打断。
 // Update only the pager; presses do not redraw covers. Page work follows on the next input tick and is cancellable by navigation.
@@ -1214,6 +1221,7 @@ static bool shelf_main_key(app_ctx_t *ctx,int key,app_redraw_t *redraw) {
     s_shelf_key_until=ctx->now_ms+35;
     *redraw=shelf_key_paint(ctx);return true;
 }
+
 static app_redraw_t shelf_turn_page(app_ctx_t *ctx, int direction);
 // 分页独立接管完整触摸，按下只反馈，抬手才翻页；容许轻点在边缘小幅漂移。
 // Own pager contacts independently: press feedback only, turn on release, tolerating small edge drift.
@@ -1345,6 +1353,8 @@ static size_t reader_page_offset(size_t page) {
     return off;
 }
 static unsigned percent(size_t page) {
+    if (book_kind() == BOOK_KIND_CBZ && book_chapter_count())
+        return (unsigned)((s_chapter + 1) * 100 / book_chapter_count());
     uint32_t total = book_total_bytes();
     if (!total) return 0;
     if (s_chapter + 1 == book_chapter_count() && page + 1 == book_layout_page_count()) return 100;
@@ -1750,6 +1760,7 @@ static void invalidate_prep(void) { s_next_page = s_prep_page = -1; s_next_gener
 // The directory uses the system face; join painting before switching and restore the reader face on return.
 static void set_reader_view(book_view_t view) {
     reader_indent_hold_cancel();
+    book_comic_cache_pause();
     s_reader_tap.pending = false;
     lock_draw();
     invalidate_prep();
@@ -2572,7 +2583,7 @@ static void draw_reading_settings(uint8_t* fb) {
     draw_reading_card(fb, 8, "按键控制", "自定义三键", false);
     draw_reading_toggle(fb, 4, "默认全屏", NULL, app_settings_reader_default_fullscreen());
     draw_reading_toggle(fb, 1, "全屏沉浸", NULL, app_settings_reader_immersive());
-    draw_reading_toggle(fb, 2, "关闭书内图片", "跳过正文插图，保留原书文件", app_settings_reader_hide_images());
+    draw_reading_toggle(fb, 2, "关闭书内图片", book_kind() == BOOK_KIND_CBZ ? "漫画始终显示图片" : "跳过正文插图，保留原书文件", reader_images_hidden());
     draw_reading_toggle(fb, 3, "竖排（从右到左）", NULL, app_settings_book_vertical());
     ui_fill_round_rect(fb, (EpdRect){36, 1141, 612, 58}, 20, UI_GRAY_BLACK);
     reader_panel_text_vc(fb, 342, 1170, 26, "完成", EPD_DRAW_ALIGN_CENTER, true);
@@ -3169,7 +3180,7 @@ static uint32_t reader_sqrt(uint32_t v) {
 // 缓存必须属于当前阅读页和布局；解码失败或换章时不能引用旧槽。
 // Require the active page and layout: failed decoding or chapter changes cannot borrow stale slots.
 static bool reader_image_cache_ready(void) {
-    return s_view == READING && s_text && !app_settings_reader_hide_images() &&
+    return s_view == READING && s_text && !reader_images_hidden() &&
         s_page_images && s_page_image_count > 0 && s_page_images_for == s_page &&
         s_page_images_generation == book_layout_generation();
 }
@@ -3228,7 +3239,8 @@ static bool reader_inline_image_at(uint16_t x, uint16_t y, int *slot) {
         if (!image->gray || image->width <= 0 || image->height <= 0) continue;
         int left = band.x + (band.width - image->width) / 2;
         int top = band.y + iy + (height - image->height) / 2;
-        if (iy == 0) top = reader_image_top();
+        if (book_kind() == BOOK_KIND_CBZ) top = band.y + (band.height - image->height) / 2;
+        else if (iy == 0) top = reader_image_top();
         if (x >= left && x < left + image->width && y >= top && y < top + image->height) {
             *slot = i;
             return true;
@@ -3621,7 +3633,7 @@ static void draw_reader_footnote_card(uint8_t *fb, size_t page, EpdRect body) {
 static void draw_reader_images(uint8_t *fb, size_t page, EpdRect body) {
     // 位图和布局代次必须匹配；预渲染另一页不能复用当前页插图。
     // Match page and layout generation; a prefetched page must never borrow current-page bitmaps.
-    if (!app_settings_reader_hide_images() && page == s_page &&
+    if (!reader_images_hidden() && page == s_page &&
         s_page_images_for == page && s_page_images_generation == book_layout_generation()) {
         // 缩放只属于缩放时的那一页；换页后回到原始大小与居中位置。
         // The scale belongs to the page it was made on; a page change returns to 1:1 and centre.
@@ -3667,9 +3679,13 @@ static void draw_reader_images(uint8_t *fb, size_t page, EpdRect body) {
                 // 页首插图贴到阅读区顶端：正文上方那点呼吸空间只属于正文，不该把插图压下来。
                 // A page-start illustration sits at the top of the reading area: the inset above
                 // body text belongs to text and must not push the illustration down.
-                if (y == 0) top = reader_image_top();
+                if (book_kind() == BOOK_KIND_CBZ)
+                    top = band.y + (band.height - image->height) / 2;
+                else if (y == 0) top = reader_image_top();
 
-                for (int iy = 0; iy < image->height; ++iy)
+                if (book_kind() == BOOK_KIND_CBZ)
+                    ui_comic_image_paint(fb, image->gray, image->width, image->height, left, top);
+                else for (int iy = 0; iy < image->height; ++iy)
                     for (int ix = 0; ix < image->width; ++ix)
                         epd_draw_pixel(left + ix, top + iy,
                             ui_image_dither_gray(inline_ink_gray(image->gray[(size_t)iy * image->width + ix]),
@@ -3677,15 +3693,21 @@ static void draw_reader_images(uint8_t *fb, size_t page, EpdRect body) {
             } else if (height >= UI_PX_CAPTION + 4 && width >= 70) {
                 char notice[64]; copy_text(notice, sizeof(notice), "此插图暂无法显示");
                 fit_text(notice, UI_PX_CAPTION, width - 8);
-                ui_text_vc(fb, body.x + body.width / 2, body.y + y + height / 2,
+                ui_text_vc(fb, body.x + body.width / 2,
+                           book_kind() == BOOK_KIND_CBZ ? band.y + band.height / 2 : body.y + y + height / 2,
                            UI_PX_CAPTION, notice, EPD_DRAW_ALIGN_CENTER, false);
             }
         }
     }
 }
 static void reader_footer_progress(char *text,size_t cap,size_t page) {
-    size_t total=book_chapter_count(),current=total?(s_chapter<total?s_chapter+1:total):0;
-    snprintf(text,cap,"%u/%u  %u%%",(unsigned)current,(unsigned)total,percent(page));
+    // 用户2026-11-06：页脚显示本章页码（与阅读统计“本章跳转”同一份页码），不再显示章节序号。
+    // User2026-11-06: show the page position inside the chapter (same count as the stats chapter
+    // jump sheet) instead of the chapter index.
+    const size_t pages = book_kind() == BOOK_KIND_CBZ ? book_chapter_count() : book_layout_page_count();
+    const size_t position = book_kind() == BOOK_KIND_CBZ ? s_chapter : page;
+    const unsigned current = pages ? (unsigned)(position < pages ? position + 1 : pages) : 0;
+    snprintf(text,cap,"%u/%u  %u%%",current,(unsigned)pages,percent(page));
 }
 // 独立绘制信息栏，先清理预读帧中的旧字形；物理刷新仍由正文/空闲局刷各自控制。
 // Paint independent metadata over clean cached bounds; body and idle updates control their own physical scans.
@@ -3849,6 +3871,7 @@ static void reader_prefetch_idle(app_ctx_t *ctx) {
 }
 static size_t current_toc_position(void) {
     if(book_kind()==BOOK_KIND_TXT){size_t current=book_navigation_position(s_chapter,reader_page_offset(s_page));if(current!=SIZE_MAX)return current;}
+    if (s_comic_active) return s_comic_index;
     size_t count = book_navigation_count();
     if (s_selected_toc < count && book_navigation_chapter(s_selected_toc) == s_chapter)
         return s_selected_toc;
@@ -3860,6 +3883,12 @@ static size_t current_toc_position(void) {
         if (selected == SIZE_MAX || chapter > best_chapter) { selected = i; best_chapter = chapter; }
     }
     return selected;
+}
+static bool comic_toc_title(size_t index, char *title, size_t capacity, void *context) {
+    (void)context;
+    if (index >= s_comic_catalog.count) return false;
+    copy_text(title, capacity, s_comic_catalog.entries[index].name);
+    return true;
 }
 static void render(app_ctx_t* ctx, uint8_t* fb) {
     lock_draw();
@@ -3879,10 +3908,13 @@ static void render(app_ctx_t* ctx, uint8_t* fb) {
         return;
     }
     if (s_view == TOC) {
-        book_toc_render(fb, s_book_title[0] ? s_book_title : s_title,
-                        book_navigation_count(), current_toc_position(), ctx->leaf, s_message);
+        if (s_comic_active)
+            book_toc_render_catalog(fb, strrchr(s_comic_directory, '/') + 1, reader_toc_count(),
+                                    s_comic_index, ctx->leaf, s_message, comic_toc_title, NULL);
+        else book_toc_render(fb, s_book_title[0] ? s_book_title : s_title,
+                             reader_toc_count(), current_toc_position(), ctx->leaf, s_message);
         if (s_toc_jump_open)
-            book_toc_render_jump(fb, book_navigation_count(), s_toc_jump_percent);
+            book_toc_render_jump(fb, reader_toc_count(), s_toc_jump_percent);
         unlock_draw();
         return;
     }
@@ -3913,8 +3945,8 @@ static void render(app_ctx_t* ctx, uint8_t* fb) {
         ui_text(fb, UI_MARGIN, 991, 17, s_message[0] ? s_message : s_shelf_warning,
                 EPD_DRAW_ALIGN_LEFT, false);
     if (app_settings_shelf_style() == 5) {
-        ui_fill_round_rect(fb, (EpdRect){36,184,612,788}, 20, UI_GRAY_WHITE);
-        ui_draw_control_frame(fb, (EpdRect){36,184,612,788}, 20, 0x50);
+        ui_fill_round_rect(fb, ui_shelf_list_frame(), 20, UI_GRAY_WHITE);
+        ui_draw_control_frame(fb, ui_shelf_list_frame(), 20, 0x50);
     }
     for (int row = 0; row < shelf_rows(); ++row) {
         int i = ctx->leaf * shelf_rows() + row;
@@ -3974,7 +4006,20 @@ static app_redraw_t reader_clock_tick(app_ctx_t *ctx) {
     s_reader_clock_pending=true;
     return APP_REDRAW_AREA;
 }
+
+static enum EpdDrawError present_water_turn(app_ctx_t *ctx, EpdRect area) {
+    // 漫画和插图共用板级图像波形，正文保留上游文字波形与补帧。
+    // Comics and illustrations share the board image waveform; text retains upstream drive phases.
+    int prior_tick = e0470_page_turn_tick_us();
+    e0470_page_turn_set_tick_us(E0470_TURN_FAST_TICK_US);
+    enum EpdDrawError err = s_reader_turn_pending ? update_display_water_turn(ctx->hl, area, s_water_turn_dir)
+        : update_display_image_turn(ctx->hl, area, s_water_turn_dir);
+    e0470_page_turn_set_tick_us(prior_tick);
+    return err;
+}
 static bool present(app_ctx_t* ctx, app_redraw_t redraw) {
+    if (redraw == APP_REDRAW_NONE || redraw == APP_REDRAW_DONE || ctx->request_app) return true;
+    book_comic_cache_pause();
     // 管理页及排序弹层一次完整清理，包含自有操作栏；不经过首页切换裁剪。/ Clean management and sorting once, including their own action bar, outside root-tab crops.
     if(s_view==BULK&&(redraw==APP_REDRAW_PAGE||redraw==APP_REDRAW_FULL)){
         prepare_covers(ctx);display_main_transition_cancel();render(ctx,ctx->fb);
@@ -4012,7 +4057,6 @@ static bool present(app_ctx_t* ctx, app_redraw_t redraw) {
         s_du_count = 0;
         return true;
     }
-    if (redraw == APP_REDRAW_NONE || redraw == APP_REDRAW_DONE || ctx->request_app) return true;
     if (s_presented_view != (int)s_view && redraw == APP_REDRAW_AREA) redraw = APP_REDRAW_PAGE;
     if ((s_view == SHELF || s_view == MANAGE || s_view == BULK) &&
         !(redraw == APP_REDRAW_AREA && (s_shelf_feedback_pending || s_cover_batch_present_pending))) {
@@ -4051,7 +4095,8 @@ static bool present(app_ctx_t* ctx, app_redraw_t redraw) {
     else
     if (image_gray_refresh && redraw == APP_REDRAW_AREA && !s_reader_cleanup && s_presented_view == (int)READING) {
         // 图文翻页只擦白内容区；界面操作仍可提交完整目标页。/ Image turns erase content only; UI changes retain complete target-page output.
-        err=update_display_area_full_with(ctx->hl,display_reader_soft_turn_waveform(),MODE_GL16,
+        if (s_water_turn_pending) err = present_water_turn(ctx, reader_area());
+        else err=update_display_area_full_with(ctx->hl,display_reader_soft_turn_waveform(),MODE_GL16,
                                          separate_metadata?body_area:(EpdRect){0,0,UI_LOCK_WIDTH,UI_LOCK_HEIGHT});
     }
     else if (image_gray_refresh) {
@@ -4076,15 +4121,11 @@ static bool present(app_ctx_t* ctx, app_redraw_t redraw) {
             s_mode == MODE_DU ? &E0470_FOLLOW_WAVEFORM : &E0470_WAVEFORM, s_mode, s_area);
     }
     else if (redraw == APP_REDRAW_AREA) {
-        // 快档每次显式设置并在推屏后恢复，不能把阅读节拍带入主页水波纹。
-        // Explicitly select fast pacing per turn and restore afterward, without leaking reader timing into main-page ripple.
-        const int prior_tick = s_water_turn_pending ? e0470_page_turn_tick_us() : 0;
-        if (s_water_turn_pending) e0470_page_turn_set_tick_us(E0470_TURN_FAST_TICK_US);
         // 翻页动画与页脚刷新独立：全屏没有页脚，仍使用用户选择的水波纹。
         // The turn effect is independent of the footer: full-screen turns still use the selected water effect.
         EpdRect turn_area=s_area;
         err = s_water_turn_pending
-            ? update_display_water_turn(ctx->hl, turn_area, s_water_turn_dir)
+            ? present_water_turn(ctx, turn_area)
             : s_reader_turn_pending && s_mode == MODE_GL16 && app_settings_reader_turn_effect() == 2 &&
               s_view == READING && s_presented_view == (int)READING &&
               s_reader_panel == READER_PANEL_NONE && !s_toolbar && !s_clear_confirm &&
@@ -4098,7 +4139,6 @@ static bool present(app_ctx_t* ctx, app_redraw_t redraw) {
                 : update_display_area_diff_with(ctx->hl,
                     s_mode == MODE_DU ? &E0470_FOLLOW_WAVEFORM : display_reader_soft_turn_waveform(),
                     s_mode, s_area);
-        if (s_water_turn_pending) e0470_page_turn_set_tick_us(prior_tick);
     }
     else err = s_view == READING
         // 面板切换只推最终灰阶目标，不将首次选择水波纹算作周期全刷。
@@ -4125,8 +4165,9 @@ static bool present(app_ctx_t* ctx, app_redraw_t redraw) {
     if (err==EPD_DRAW_SUCCESS && reader_status_visible() &&
         (redraw==APP_REDRAW_PAGE || redraw==APP_REDRAW_FULL || s_reader_cleanup))
         s_reader_clock_minute=frame_minute;
-    s_reader_text_frame = err == EPD_DRAW_SUCCESS && s_view == READING && s_text &&
-        s_reader_panel == READER_PANEL_NONE && !s_toolbar && !s_clear_confirm &&
+    s_reader_body_frame = err == EPD_DRAW_SUCCESS && s_view == READING && s_text &&
+        s_reader_panel == READER_PANEL_NONE && !s_toolbar && !s_clear_confirm;
+    s_reader_text_frame = s_reader_body_frame &&
         book_layout_page_image_count(s_page) == 0 && !app_settings_book_background_path()[0];
     s_reader_cleanup = false;
     s_reader_image_refresh_pending = false;
@@ -4149,7 +4190,7 @@ static app_redraw_t paint_reading(app_ctx_t* ctx, enum EpdDrawMode mode) {
     int64_t started = esp_timer_get_time();
     (void)ui_reader_background_prepare(app_settings_book_background_path());
     prepare_inline_image();
-    s_reader_image_refresh_pending = !app_settings_reader_hide_images() &&
+    s_reader_image_refresh_pending = !reader_images_hidden() &&
         book_layout_page_image_count(s_page) > 0 && s_page_images;
     lock_draw();
     bool cached = !s_toolbar && !s_clear_confirm && s_next_fb &&
@@ -4225,13 +4266,14 @@ static void track_ticket_stats(app_ctx_t* ctx) {
     if (s_stats_pending_ms >= 30000) flush_ticket_stats();
 }
 static void free_book(void) {
+    book_comic_cache_close();
     reader_font_recovery_reset();
     s_chapter_jump_undo.valid = false;
     s_chapter_jump_digits[0] = 0;
     flush_ticket_stats();
     e0470_page_turn_release();
     s_water_turn_pending = false;
-    s_reader_turn_pending = s_reader_text_frame = false;
+    s_reader_turn_pending = s_reader_text_frame = s_reader_body_frame = false;
     pending_progress_t* pending = pending_find(s_path);
     if (pending && !pending->dirty) pending_discard(s_path);
     invalidate_prep();
@@ -4293,6 +4335,7 @@ static void release_page_images(void) {
     for (int i = 0; i < s_page_image_count; ++i) free(s_page_images[i].gray);
     free(s_page_images); s_page_images = NULL; s_page_image_count = 0;
     s_page_images_for = SIZE_MAX;
+    s_page_images_chapter = SIZE_MAX;
 }
 // 渐进式插图要 1-3 MB 系数缓冲：解码前把本页用不到的整页预取、书架封面和字形缓存还回去，
 // 解完再让各自的按需路径重建。只在 PSRAM 紧张时动手，纯文字页不受影响。
@@ -4310,14 +4353,46 @@ static void release_image_headroom(void) {
     (void)ttf_font_cache_clear_all();
 }
 static void prepare_inline_image(void) {
-    if (app_settings_reader_hide_images()) { release_page_images(); return; }
+    if (reader_images_hidden()) { release_page_images(); return; }
     uint32_t generation = book_layout_generation();
     if (s_page_images_for == s_page && s_page_images_generation == generation) return;
     // 纯文字跨页不应作废已排好的下一页；布局代次改变或任一侧有插图时才失效。
     // Preserve the prefetched next text page; invalidate only across layout generations or image-bearing pages.
     const bool changed_layout_or_image = s_page_images_generation != generation || s_page_image_count > 0;
+    bool comic = book_kind() == BOOK_KIND_CBZ;
+    EpdRect band = book_layout_image_rect();
+    if (comic && s_page_images_chapter == s_chapter && s_page_image_count == 1 &&
+        s_page_images && s_page_images[0].gray &&
+        band.width == s_page_images_band.width && band.height == s_page_images_band.height) {
+        s_page_images_for = s_page; s_page_images_generation = generation;
+        return;
+    }
+    int64_t started = esp_timer_get_time();
+    book_comic_bitmap_t cached = {0};
+    if (comic) {
+        if (!book_comic_cache_take(s_chapter, band.width, band.height, &cached)) {
+            book_comic_cache_wait(s_chapter, band.width, band.height);
+            (void)book_comic_cache_take(s_chapter, band.width, band.height, &cached);
+        }
+        // 先取目标再存旧页，避免两槽LRU把正在请求的上一页淘汰。
+        // Take the target before storing the old page so two-slot LRU cannot evict the requested previous page.
+        if (s_page_images && s_page_image_count == 1 && s_page_images[0].gray &&
+            s_page_images_chapter != SIZE_MAX) {
+            book_comic_bitmap_t old = {
+                .page = s_page_images_chapter,
+                .max_width = (unsigned)s_page_images_band.width,
+                .max_height = (unsigned)s_page_images_band.height,
+                .width = (unsigned)s_page_images[0].width,
+                .height = (unsigned)s_page_images[0].height,
+                .gray = s_page_images[0].gray,
+            };
+            s_page_images[0].gray = NULL;
+            book_comic_cache_put(&old);
+        }
+    }
     release_page_images();
     s_page_images_for = s_page; s_page_images_generation = generation;
+    s_page_images_chapter = s_chapter; s_page_images_band = band;
     // 插图不显示没有别的症状，每条失败路径以前都是静默 continue；这里把结局记下来，
     // 免得继续靠猜。
     // A missing illustration has no other symptom and every failure path used to be a silent
@@ -4327,11 +4402,13 @@ static void prepare_inline_image(void) {
     if (count > 0) release_image_headroom();
     size_t psram_before = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!count || count > (int)HTML_TEXT_MAX_BLOCKS) {
+        free(cached.gray);
         ESP_LOGI(TAG, "inline page %u: %d image slots", (unsigned)s_page, count);
         return;
     }
     s_page_images = heap_caps_calloc((size_t)count, sizeof(*s_page_images), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!s_page_images) {
+        free(cached.gray);
         // 分配失败时计数必须跟着归零：release_page_images 会按计数遍历这张表。
         // The count has to follow the table to zero: release_page_images walks it by count.
         s_page_image_count = 0;
@@ -4339,10 +4416,16 @@ static void prepare_inline_image(void) {
         return;
     }
     s_page_image_count = count;
+    if (cached.gray && count == 1) {
+        s_page_images[0] = (reader_image_t){cached.gray, (int)cached.width, (int)cached.height};
+        ESP_LOGI(TAG, "comic page=%u prepare=%lldms cache=1", (unsigned)s_chapter + 1,
+                 (esp_timer_get_time() - started) / 1000);
+        return;
+    }
+    free(cached.gray);
     // 逐张解码并立即释放压缩数据；全页灰阶位图的总面积不超过插图区域。
     // Decode serially and release each encoded buffer; the page's bitmap area stays within its
     // illustration region.
-    EpdRect band = book_layout_image_rect();
     size_t pixels_left = (size_t)band.width * band.height;
     int decoded = 0;
     for (int i = 0; i < count; ++i) {
@@ -4404,6 +4487,8 @@ static void prepare_inline_image(void) {
                  (unsigned)(psram_before / 1024),
                  (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) / 1024));
     }
+    if (comic) ESP_LOGI(TAG, "comic page=%u prepare=%lldms cache=0", (unsigned)s_chapter + 1,
+                       (esp_timer_get_time() - started) / 1000);
 }
 // 标题匹配要宽松：书内导航与正文的写法常常不同（"第一章 出发" 对 "出发"、"1. Prologue" 对
 // "序章"，竖排书尤其如此）。逐字比较失败时正文标题块不会被跳过，题头与正文就各显示一次。
@@ -4494,6 +4579,7 @@ static bool load_chapter_at(app_ctx_t* ctx, size_t chapter, size_t offset,
     reader_dims_ctx_t old_dims_ctx = s_reader_dims_ctx;
     lock_draw();
     invalidate_prep();
+    book_layout_set_images_visible(!reader_images_hidden());
     // 题头几何按当前模式重算，横排留顶部行高、竖排留右侧列宽，绘制与预留不会错开。
     // Recompute the heading geometry for the current mode -- rows at the top horizontally,
     // columns at the right vertically -- so drawing and reservation cannot drift apart.
@@ -4546,7 +4632,9 @@ static bool load_chapter_at(app_ctx_t* ctx, size_t chapter, size_t offset,
     for (size_t i = 0; i < s_image_count; ++i) free(s_images[i]);
     free(s_images);
     s_images = loaded.images; s_image_count = loaded.image_count;
-    release_page_images();
+    // 漫画旧位图留到 prepare_inline_image 转进相邻缓存；其他书继续即时释放。
+    // Preserve a comic bitmap until prepare_inline_image moves it into the adjacent cache; other books release immediately.
+    if (book_kind() != BOOK_KIND_CBZ) release_page_images();
     s_chapter = chapter;
     s_chapter_jump_undo.valid = false;
     if (clear_toc) s_selected_toc = SIZE_MAX;
@@ -4579,7 +4667,7 @@ static bool load_chapter(app_ctx_t* ctx, size_t chapter, size_t offset, bool las
 }
 // 关闭图片时跳过纯插图页，避免出现空白翻页。/ Skip illustration-only pages when images are disabled.
 static void skip_hidden_image_pages(app_ctx_t *ctx, int direction) {
-    if (!app_settings_reader_hide_images()) return;
+    if (!reader_images_hidden()) return;
     for (int guard = 0; guard < 128 && book_layout_page_image(s_page) >= 0; ++guard) {
         if (direction > 0 && s_page + 1 < book_layout_page_count()) ++s_page;
         else if (direction < 0 && s_page > 0) --s_page;
@@ -4589,6 +4677,11 @@ static void skip_hidden_image_pages(app_ctx_t *ctx, int direction) {
             if (!load_chapter(ctx, s_chapter - 1, 0, true)) break;
         } else break;
     }
+}
+static size_t reader_open_chapter_index(bool resume, const book_progress_t *progress, size_t count) {
+    if (s_comic_open_position < 0) return count ? count - 1 : 0;
+    if (s_comic_open_position > 0) return 0;
+    return resume && progress->chapter < count ? progress->chapter : 0;
 }
 static bool open_book_impl(app_ctx_t* ctx, const char* path) {
     if (!book_file_path_supported(path)) {
@@ -4663,6 +4756,15 @@ static bool open_book_impl(app_ctx_t* ctx, const char* path) {
         return false;
     }
     esp_err_t err = book_open(path);
+    if (err == ESP_OK && book_kind() == BOOK_KIND_CBZ) {
+        // 旧文字预渲染已由present汇合，释放其整帧与闲置任务，为漫画预解码留余量。
+        // Presentation has joined text preparation; release its full frame and idle task for comic headroom.
+        if (s_prep_task) { vTaskDelete(s_prep_task); s_prep_task = NULL; }
+        free(s_next_fb); s_next_fb = NULL;
+        s_comic_direction = 1;
+        esp_err_t cache_err = book_comic_cache_open(path);
+        if (cache_err != ESP_OK) ESP_LOGW(TAG, "comic cache unavailable: %s", esp_err_to_name(cache_err));
+    }
     // 书源打开后再把书内字体开关接上：EPUB 才有效，TXT 是空操作。
     // Wire the embedded-face switch only after the source is open: it only applies to EPUB,
     // and is a no-op for TXT.
@@ -4694,20 +4796,20 @@ static bool open_book_impl(app_ctx_t* ctx, const char* path) {
         clean_filename(s_book_title, sizeof(s_book_title), filename);
     s_file_size = (uint32_t)st.st_size;
     book_progress_t p = {0};
-    bool resume = pending_restore(path, s_file_size, &p) || book_progress_load(path, s_file_size, &p);
+    bool resume = !s_comic_open_position && (pending_restore(path, s_file_size, &p) || book_progress_load(path, s_file_size, &p));
     // 排版字号以全局阅读设置为准；旧书进度只决定阅读位置。
     // Use the shared reading size for every book; per-book progress restores position only.
     s_px = app_settings_book_px();
     if (s_px < BOOK_PX_MIN || s_px > BOOK_PX_MAX) s_px = 48;
-    size_t chapter = resume && p.chapter < book_chapter_count() ? p.chapter : 0;
-    if (!load_chapter(ctx, chapter, resume && p.chapter == chapter ? p.byte_off : 0, false)) {
+    size_t chapter = reader_open_chapter_index(resume, &p, book_chapter_count());
+    if (!load_chapter(ctx, chapter, resume && p.chapter == chapter ? p.byte_off : 0, s_comic_open_position < 0)) {
         free_book();
         return false;
     }
     skip_hidden_image_pages(ctx, 1);
     if (!s_text) { free_book(); return false; }
     s_view = READING;
-    s_reader_image_refresh_pending = !app_settings_reader_hide_images() &&
+    s_reader_image_refresh_pending = !reader_images_hidden() &&
         book_layout_page_image_count(s_page) > 0 && s_page_images;
     s_stats_last_ms = s_stats_activity_ms = ctx->now_ms;
     s_reader_panel = READER_PANEL_NONE;
@@ -4725,6 +4827,7 @@ static bool open_book_impl(app_ctx_t* ctx, const char* path) {
     return true;
 }
 static bool open_book(app_ctx_t *ctx, const char *path) {
+    book_comic_cache_pause();
     if (!book_cover_jobs_quiesce(2000)) {
         copy_text(s_message,sizeof(s_message),"封面任务正在收尾，请稍后再试");return false;
     }
@@ -4745,11 +4848,54 @@ static bool open_requested_book(app_ctx_t* ctx) {
     bool from_home = s_requested_open_home;
     s_requested_open[0] = 0;
     s_requested_open_home = false;
+    s_comic_active = false;
+    s_comic_open_position = 0;
+    book_comics_dispose(&s_comic_catalog);
+    if (s_requested_comic && book_comics_context(path, s_comic_directory)) {
+        s_requested_comic = false;
+        esp_err_t err = book_comics_scan(s_comic_directory, &s_comic_catalog);
+        s_comic_index = SIZE_MAX;
+        for (size_t i = 0; i < s_comic_catalog.count; ++i)
+            if (!strcmp(s_comic_catalog.entries[i].path, path)) { s_comic_index = i; break; }
+        s_comic_return_page = s_requested_comic_page >= 0 ? s_requested_comic_page :
+            s_comic_index == SIZE_MAX ? 0 : (int)(s_comic_index / ui_shelf_rows(app_settings_shelf_style()));
+        s_comic_active = true;
+        if (err != ESP_OK || s_comic_catalog.incomplete || s_comic_index == SIZE_MAX) {
+            comic_return(ctx, err == ESP_ERR_NO_MEM ? "内存不足，无法读取章节" : "章节缺失或目录不可读");
+            return true;
+        }
+    }
     bool opened = open_book(ctx, path);
     s_requested_fullscreen = false;
     s_requested_resume_mode = false;
-    if (!opened) return false;
-    s_reader_return_home = from_home;
+    if (!opened) {
+        if (s_comic_active) { comic_return(ctx, s_message); return true; }
+        return false;
+    }
+    s_reader_return_home = from_home && !s_comic_active;
+    return true;
+}
+static app_redraw_t comic_return(app_ctx_t *ctx, const char *message) {
+    char notice[128]; copy_text(notice, sizeof(notice), message ? message : "");
+    book_comic_cache_pause(); save_progress(); free_book();
+    app_comics_request_chapters(s_comic_directory, s_comic_return_page, notice);
+    ui_nav_request(ctx, UI_NAV_COMICS);
+    return APP_REDRAW_NONE;
+}
+static bool comic_open_chapter(app_ctx_t *ctx, size_t index, int position) {
+    if (index >= s_comic_catalog.count) return false;
+    char path[BOOK_STORE_PATH_MAX]; copy_text(path, sizeof(path), s_comic_catalog.entries[index].path);
+    book_comic_cache_pause(); save_progress();
+    s_comic_open_position = position;
+    // 跨文件翻页保留当前显示模式，不重新套用新开书偏好。
+    // File-boundary turns retain the active display mode rather than reapplying new-book defaults.
+    s_requested_fullscreen = s_reader_fullscreen;
+    s_requested_resume_mode = true;
+    bool ok = open_book(ctx, path);
+    s_requested_resume_mode = false;
+    s_comic_open_position = 0;
+    if (!ok) { comic_return(ctx, s_message); return false; }
+    s_comic_index = index; s_reader_return_home = false;
     return true;
 }
 /* ---- 书架数据 / Shelf data ---- */
@@ -5031,7 +5177,7 @@ static void scan_shelf_dir(app_ctx_t *ctx, const char *root, bool is_flash, nvs_
         }
         if (!S_ISREG(st.st_mode)) continue;
         const char *ext = strrchr(ent->d_name, '.');
-        if (!book_file_path_supported(path)) continue;
+        if (!ext || (strcasecmp(ext, ".txt") && strcasecmp(ext, ".epub") && strcasecmp(ext, ".cbz"))) continue;
         // 显式移出书架的书不再列入；文件仍在存储卡上，随时可以重新读回书架。
         // Books the user removed stay off the shelf; the file stays on the card and reading it
         // again puts it back.
@@ -5078,7 +5224,25 @@ typedef struct {
     bool truncated;
 } shelf_backfill_t;
 
+// CBZ只补回现有书目录；独立漫画的章节进度不混入普通书架。
+// Backfill CBZ only within existing book roots, keeping independent comic chapters off the ordinary shelf.
+static bool shelf_cbz_in_books(const char *path) {
+    const char *selected = app_settings_books_dir();
+    const char *roots[] = {selected, "/flash/books",
+        !strcmp(selected, "/sdcard/books") ? "/sdcard/book" : NULL};
+    for (unsigned i = 0; i < sizeof(roots) / sizeof(roots[0]); ++i) {
+        if (!roots[i]) continue;
+        size_t length = strlen(roots[i]);
+        while (length > 1 && roots[i][length - 1] == '/') --length;
+        if (length && !strncmp(path, roots[i], length) && path[length] == '/') return true;
+    }
+    return false;
+}
+
 static bool shelf_backfill_visit(const char* path, const book_progress_t* progress, void* ctx) {
+    const char *source_ext = strrchr(path, '.');
+    if (!source_ext || (strcasecmp(source_ext, ".txt") && strcasecmp(source_ext, ".epub") &&
+        (strcasecmp(source_ext, ".cbz") || !shelf_cbz_in_books(path)))) return true;
     shelf_backfill_t* scan = ctx;
     if (scan->truncated) return false;
     // 历史可能来自其他固件；只补入当前阅读器支持的真实文件格式。
@@ -5376,7 +5540,7 @@ static bool reader_turn_chrome(app_ctx_t *ctx) {
     (void)ctx;
     bool changed=s_reader_panel!=READER_PANEL_NONE;
     s_reader_panel=READER_PANEL_NONE;s_reader_slider=-1;
-    if(changed){invalidate_prep();s_reader_text_frame=false;}
+    if(changed){invalidate_prep();s_reader_text_frame=s_reader_body_frame=false;}
     return changed;
 }
 static app_redraw_t turn_page(app_ctx_t* ctx, int dir) {
@@ -5385,22 +5549,48 @@ static app_redraw_t turn_page(app_ctx_t* ctx, int dir) {
     // 页面图片表可能随跨章加载替换，旧页资格以实际成功显示的画面为准。
     // Chapter loads may replace the image table; the old-page eligibility comes from the displayed frame.
     bool from_text_frame = s_reader_text_frame;
+    bool from_body_frame = s_reader_body_frame;
+    bool chrome_before = s_toolbar;
+    bool crossed_comic_file = false;
     bool changed = true;
     if (dir > 0 && s_page + 1 < book_layout_page_count()) ++s_page;
     else if (dir < 0 && s_page) --s_page;
-    else if (dir > 0 && s_chapter + 1 < book_chapter_count()) { save_progress(); changed = load_chapter(ctx, s_chapter + 1, 0, false); }
-    else if (dir < 0 && s_chapter) { save_progress(); changed = load_chapter(ctx, s_chapter - 1, 0, true); }
+    else if (dir > 0 && s_chapter + 1 < book_chapter_count()) {
+        if (book_kind() != BOOK_KIND_CBZ) save_progress();
+        changed = load_chapter(ctx, s_chapter + 1, 0, false);
+    }
+    else if (dir < 0 && s_chapter) {
+        if (book_kind() != BOOK_KIND_CBZ) save_progress();
+        changed = load_chapter(ctx, s_chapter - 1, 0, true);
+    }
+    else if (s_comic_active && book_kind() == BOOK_KIND_CBZ) {
+        crossed_comic_file = true;
+        if (dir > 0 && s_comic_index + 1 < s_comic_catalog.count)
+            changed = comic_open_chapter(ctx, s_comic_index + 1, 1);
+        else if (dir < 0 && s_comic_index)
+            changed = comic_open_chapter(ctx, s_comic_index - 1, -1);
+        else {
+            if (dir > 0) {
+                book_comic_cache_pause(); save_progress();
+                copy_text(s_reader_notice, sizeof(s_reader_notice), "整部漫画已读完");
+                s_reader_notice_until = ctx->now_ms + 3000;
+                return APP_REDRAW_PAGE;
+            }
+            return reader_turn_chrome(ctx) ? APP_REDRAW_PAGE : APP_REDRAW_NONE;
+        }
+        if (!changed) return APP_REDRAW_NONE;
+    }
     else return reader_turn_chrome(ctx) ? APP_REDRAW_PAGE : APP_REDRAW_NONE;
     if (!changed) { set_reader_view(s_text ? TOC : SHELF); ctx->leaf = s_text ? book_toc_open(current_toc_position()) : 0; return APP_REDRAW_PAGE; }
     skip_hidden_image_pages(ctx, dir);
     if (!s_text) { s_view = SHELF; return APP_REDRAW_PAGE; }
-    // 翻页保留当前模式和目标位置，只有切换沉浸才重排。
-    // Turns retain mode and destination; only an explicit immersive toggle reflows text.
-    bool chrome_changed = reader_turn_chrome(ctx);
+    // 翻页保留当前模式和目标位置。/ Turns retain the current mode and destination.
+    bool chrome_changed = reader_turn_chrome(ctx) || (crossed_comic_file && chrome_before);
     if (!s_text) return APP_REDRAW_PAGE;
     s_jump_offset = SIZE_MAX;
     s_last_turn_ms = s_stats_activity_ms = ctx->now_ms;
     ++s_stats_pending_turns;
+    if (book_kind() == BOOK_KIND_CBZ) s_comic_direction = dir > 0 ? 1 : -1;
     ++s_session_turns;
     uint8_t full_pages = app_settings_reader_full_pages();
     if (full_pages) ++s_turns;
@@ -5416,8 +5606,7 @@ static app_redraw_t turn_page(app_ctx_t* ctx, int dir) {
     s_reader_turn_pending = !chrome_changed && redraw == APP_REDRAW_AREA && from_text_frame &&
         book_layout_page_image_count(s_page) == 0 && !app_settings_book_background_path()[0];
     s_water_turn_pending = !chrome_changed && redraw == APP_REDRAW_AREA && !s_reader_cleanup &&
-                           app_settings_reader_turn_effect() == 1 && from_text_frame &&
-                           book_layout_page_image_count(s_page) == 0 && !app_settings_book_background_path()[0];
+                           app_settings_reader_turn_effect() == 1 && from_body_frame;
     s_water_turn_dir = dir > 0 ? E0470_TURN_RTL : E0470_TURN_LTR;
     return chrome_changed ? APP_REDRAW_PAGE : redraw;
 }
@@ -5622,8 +5811,9 @@ static app_redraw_t apply_reader_option(app_ctx_t* ctx, int kind) {
         return APP_REDRAW_PAGE;
     }
     if (!s_text || kind < 1 || kind > 3) return APP_REDRAW_NONE;
+    if (kind == 2 && book_kind() == BOOK_KIND_CBZ) return APP_REDRAW_NONE;
     bool previous = kind == 1 ? app_settings_reader_immersive() :
-        kind == 2 ? app_settings_reader_hide_images() : app_settings_book_vertical();
+                    kind == 2 ? reader_images_hidden() : app_settings_book_vertical();
     // 沉浸样式决定固定正文区域，工具栏显示期间修改也须重排并保留锚点。
     // Immersion defines the stable body, so changing it with tools visible also reflows at the anchor.
     // 重新开启插图时，先补齐尺寸；文件读取必须在绘制锁外。
@@ -5696,6 +5886,8 @@ static app_redraw_t apply_reader_option(app_ctx_t* ctx, int kind) {
 // 返回主页以本次开书来源为准；分类页码已在书架开书前记忆，不被目录/工具栏覆盖。
 // Return to this opening's origin; shelf category/page were saved before opening, independently of TOC/tools.
 static app_redraw_t reader_return(app_ctx_t *ctx) {
+    if (s_comic_active) return comic_return(ctx, "");
+    book_comic_cache_pause();
     save_progress();
     if (s_reader_return_home) {
         ui_nav_request(ctx, 0);
@@ -6717,7 +6909,7 @@ static app_redraw_t action_at(app_ctx_t* ctx, uint16_t x, uint16_t y) {
             s_toc_jump_open = s_toc_jump_drag = false;
             return APP_REDRAW_PAGE;
         }
-        int target = book_toc_hit(x, y, ctx->leaf, book_navigation_count());
+        int target = book_toc_hit(x, y, ctx->leaf, reader_toc_count());
         if (target == BOOK_TOC_BACK) {
             if (book_toc_picker_close(&ctx->leaf)) return APP_REDRAW_PAGE;
             s_message[0] = 0;
@@ -6736,13 +6928,17 @@ static app_redraw_t action_at(app_ctx_t* ctx, uint16_t x, uint16_t y) {
         }
         if (target == BOOK_TOC_SELECT_VOLUME && !s_message[0])
             return book_toc_picker_toggle(&ctx->leaf) ? APP_REDRAW_PAGE : APP_REDRAW_NONE;
-        if (target == BOOK_TOC_JUMP && book_navigation_count()) {
+        if (target == BOOK_TOC_JUMP && reader_toc_count()) {
             s_toc_jump_open = true;
             s_toc_jump_percent = (ctx->leaf + 1) * 100 / leaves();
             return APP_REDRAW_PAGE;
         }
         if (!s_message[0] && book_toc_toggle(target, &ctx->leaf)) return APP_REDRAW_PAGE;
         if (target >= 0 && !s_message[0]) {
+            if (s_comic_active) {
+                bool ok = comic_open_chapter(ctx, (size_t)target, 0);
+                return ok ? APP_REDRAW_PAGE : APP_REDRAW_NONE;
+            }
             size_t chapter = book_navigation_chapter((size_t)target);
             if (chapter >= book_chapter_count()) return APP_REDRAW_NONE;
             save_progress();
@@ -6894,7 +7090,7 @@ static void on_enter(app_ctx_t* ctx) {
     while (ble_pt_pop_key(&old_key)) {}
     while (ble_pt_pop_raw(&old_raw)) {}
     book_layout_set_spacing(app_settings_book_line_spacing(), app_settings_book_paragraph_spacing());
-    book_layout_set_images_visible(!app_settings_reader_hide_images());
+    book_layout_set_images_visible(!reader_images_hidden());
     // 插图通栏：整屏宽是面板常量，进入阅读页说一次，之后每次重排都沿用同一条带。
     // Full-bleed illustrations: the panel width is a constant, so publish it once per entry and
     // every later re-layout reuses the same band.
@@ -6986,6 +7182,7 @@ static void book_on_exit(app_ctx_t* ctx) {
     book_cover_jobs_cancel(s_cover_generation);s_cover_generation=0;
     shelf_category_remember(ctx);
     s_category_menu=false;
+    book_comic_cache_pause();
     s_reader_tap.pending = false;
     s_shelf_page_pending = false;
     ui_keyboard_end();
@@ -6998,6 +7195,7 @@ static void book_on_exit(app_ctx_t* ctx) {
     ui_reader_background_release();
     free(s_backgrounds); s_backgrounds = NULL; s_background_count = 0;
     free_book();
+    book_comics_dispose(&s_comic_catalog); s_comic_active = false;
     free(s_next_fb);
     s_next_fb = NULL;
     if(s_prep_task){vTaskDelete(s_prep_task);s_prep_task=NULL;}
@@ -7011,6 +7209,8 @@ static void book_on_media_lost(app_ctx_t* ctx) {
     s_shelf_key_mode=s_shelf_key_paint_pending=false;s_shelf_key_delta=s_shelf_key_pressed=0;
     shelf_category_remember(ctx);
     s_category_menu=false;
+    bool comic = s_comic_active;
+    book_comic_cache_pause();
     s_reader_tap.pending = false;
     lock_draw();
     save_progress();
@@ -7031,6 +7231,11 @@ static void book_on_media_lost(app_ctx_t* ctx) {
     s_du_count = 0;
     copy_text(s_storage, sizeof(s_storage), "TF 卡已移除");
     copy_text(s_message, sizeof(s_message), "TF 卡已移除");
+    book_comics_dispose(&s_comic_catalog); s_comic_active = false;
+    if (comic) {
+        app_comics_request_chapters("", 0, "TF 卡已移除");
+        ui_nav_request(ctx, UI_NAV_COMICS);
+    }
 }
 static void book_on_media_ready(app_ctx_t* ctx) {
     (void)ctx;
@@ -7053,7 +7258,7 @@ static int control_at(app_ctx_t* ctx, uint16_t x, uint16_t y, EpdRect* rect) {
             if (ui_rect_hit(*rect, x, y)) return 701 + i;
         }
         int tab = ui_nav_hit(x, y);
-        if (tab >= 0) { *rect = (EpdRect){tab * 171, UI_NAV_TOP, 171, 120}; return 705 + tab; }
+        if (tab >= 0) { *rect = ui_nav_tab_rect(tab); return 705 + tab; }
         return -1;
     }
     if (s_view == SEARCH) {
@@ -7224,6 +7429,7 @@ static void zoom_blit_bits(uint8_t *fb, const uint8_t *bits, EpdRect phys) {
     }
 }
 static app_redraw_t zoom_frame(app_ctx_t* ctx) {
+    book_comic_cache_pause();
     const reader_image_t *image = reader_zoom_image();
     if (!image || !image->gray) { reader_zoom_reset(); return APP_REDRAW_NONE; }
     s_image_zoom_bw = true;
@@ -7501,8 +7707,8 @@ static app_redraw_t gesture_event(app_ctx_t* ctx, const ui_gesture_event_t* ev) 
             return APP_REDRAW_NONE;
         }
         if (ev->type == UI_GESTURE_TAP) {
-            int start = book_toc_hit(ev->x0, ev->y0, ctx->leaf, book_navigation_count());
-            int end = book_toc_hit(ev->x, ev->y, ctx->leaf, book_navigation_count());
+            int start = book_toc_hit(ev->x0, ev->y0, ctx->leaf, reader_toc_count());
+            int end = book_toc_hit(ev->x, ev->y, ctx->leaf, reader_toc_count());
             if (start != -1 && start == end) return action_at(ctx, ev->x0, ev->y0);
         }
         if (ev->type == UI_GESTURE_SWIPE_U || ev->type == UI_GESTURE_SWIPE_D) {
@@ -7944,6 +8150,21 @@ static app_redraw_t on_tick(app_ctx_t* ctx) {
     if(metadata!=APP_REDRAW_NONE)return metadata;
     app_redraw_t clock=reader_clock_tick(ctx);
     if(clock==APP_REDRAW_NONE)reader_prefetch_idle(ctx);
+    if (clock == APP_REDRAW_NONE && book_kind() == BOOK_KIND_CBZ &&
+        s_image_zoom <= READER_IMAGE_ZOOM_MIN && !s_image_zoom_bw &&
+        app_book_reader_body_visible() && !s_reader_tap.pending &&
+        !(ctx->touch && ctx->touch->touched) && ctx->now_ms - s_last_turn_ms >= 200) {
+        // 空闲存档等预解码结束；不能中断即将用到的页面再从头读取。
+        // Idle checkpointing waits for predecode instead of restarting the imminent page.
+        if (s_unsaved && ctx->now_ms - s_last_turn_ms >= 2000 && !book_comic_cache_busy()) {
+            save_progress();
+        }
+        EpdRect band = book_layout_image_rect();
+        if (s_comic_direction > 0 && s_chapter + 1 < book_chapter_count())
+            book_comic_cache_prefetch(s_chapter + 1, band.width, band.height);
+        else if (s_comic_direction < 0 && s_chapter > 0)
+            book_comic_cache_prefetch(s_chapter - 1, band.width, band.height);
+    }
     return clock;
 }
 static void before_lock(app_ctx_t* ctx) {
@@ -7951,9 +8172,11 @@ static void before_lock(app_ctx_t* ctx) {
     s_shelf_key_mode=s_shelf_key_paint_pending=false;s_shelf_key_delta=s_shelf_key_pressed=0;
     shelf_category_remember(ctx);
     s_category_menu=false;
+    book_comic_cache_pause();
     s_reader_tap.pending = false;
     track_ticket_stats(ctx);
     save_progress();
+    if (s_comic_active) app_comics_save_navigation(s_comic_directory, s_comic_return_page);
     // 锁屏前丢弃分行预绘，后续只按当前字体重建。/ Discard idle prefetch before lock; rebuild only with the current face.
     lock_draw();
     invalidate_prep();
@@ -7970,7 +8193,7 @@ static bool main_page_visible(app_ctx_t* ctx) {
 }
 
 const app_desc_t app_book = {
-    .title = "图书 Books", .detail = "TF 卡 txt / epub 阅读", .enter_full = false, .owns_keys = true,
+    .title = "图书 Books", .detail = "TF 卡 txt / epub / cbz 阅读", .enter_full = false, .owns_keys = true,
     .defer_middle_short = true,
     .menu_handle_enabled = menu_handle_enabled,
     .main_page_visible = main_page_visible,

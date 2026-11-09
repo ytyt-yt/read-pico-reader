@@ -9,8 +9,11 @@
  * User revision: reuse scan metadata, read cover headers for dimensions and commit fresh frame caches after presentation.
  * 冻结：不改拼贴像素、缓存键或校验；延后写入仅引用调用者仍持有的完整画布，不增加整帧副本。
  * Frozen: Keep artwork, cache keys and checksums. Deferred persistence borrows a caller-owned complete frame, never another full copy.
+ * 用户要求 CBZ 漫画：书籍入口与管理同时识别 .cbz，沿用现有生命周期与存储限制。
+ * User requests CBZ comics: book entry/management also accept .cbz, retaining lifecycle and storage limits.
  */
 #include "book_lock_collage.h"
+#include "book_cbz.h"
 #include <dirent.h>
 #include <errno.h>
 #include <math.h>
@@ -142,7 +145,7 @@ static int book_order(const lock_book_t *a, const lock_book_t *b) {
 static bool collect_book(lock_library_t *library, const char *path,
                           const struct stat *st, const book_progress_t *saved) {
     const char *ext = strrchr(path, '.');
-    if (!ext || (strcasecmp(ext, ".epub") && strcasecmp(ext, ".txt")) ||
+    if (!ext || (strcasecmp(ext, ".epub") && strcasecmp(ext, ".txt") && strcasecmp(ext, ".cbz")) ||
         !S_ISREG(st->st_mode) || st->st_size < 0 || (uint64_t)st->st_size > UINT32_MAX ||
         strlen(path) >= BOOK_STORE_PATH_MAX || hidden_book(library->hidden, path)) return false;
     // 只保留常读/最近的十五条；总数继续完整统计，目录和字体不作书籍计数。
@@ -397,8 +400,12 @@ static uint8_t *cover_load_bounded(lock_book_t *book, bool *complete, size_t lim
     if (budget > limit) budget = limit;
     const char *ext = strrchr(book->path, '.');
     esp_err_t error = ESP_ERR_NOT_FOUND;
-    if (budget && ext && !strcasecmp(ext, ".epub") && pico_boot_asset_allowed(book->path))
-        error = book_epub_cover_bounded(book->path, &data, &bytes, &png, budget);
+    if (budget && ext && pico_boot_asset_allowed(book->path)) {
+        if (!strcasecmp(ext, ".epub"))
+            error = book_epub_cover_bounded(book->path, &data, &bytes, &png, budget);
+        else if (!strcasecmp(ext, ".cbz"))
+            error = book_cbz_cover_bounded(book->path, &data, &bytes, &png, budget);
+    }
     if (error == ESP_OK && book_image_dimensions(data, bytes, png, &sw, &sh) &&
         sw && sh && sw <= 65535 && sh <= 65535) {
         unsigned h = 334, w = (unsigned)(((uint64_t)h * sw + sh / 2u) / sh);

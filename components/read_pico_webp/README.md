@@ -1,8 +1,8 @@
 # read_pico_webp
 
-中文：WebP 解码组件。固件只在这里放 libwebp 的**解码器子集**，供 EPUB 插图/封面和 TF 图片路径使用；编码器、动画与增量接口都没有编进来。
+中文：WebP 解码组件。固件只在这里放 libwebp 的**解码器子集**，供 EPUB 插图/封面、TF 图片及 CBZ 漫画使用；不编译编码器和动画，漫画通过已有增量解码入口支持协作取消。
 
-English: WebP decoding component. Only libwebp's **decoder subset** lives here for EPUB illustrations/covers and TF image paths; the encoder, animation and incremental APIs are not built.
+English: WebP decoding component. Only libwebp's **decoder subset** lives here for EPUB illustrations/covers, TF images and CBZ comics; no encoder or animation is built. Comics use the incremental decoder for cooperative cancellation.
 
 ## 来源 / Provenance
 
@@ -21,9 +21,9 @@ Only the generic C sources above are built. SIMD, demux/ANIM and the encoder are
 
 ## 对外接口 / Public surface
 
-见 [include/read_pico_webp.h](include/read_pico_webp.h)：签名判断、只读头部尺寸、按像素上限解码成 RGB565 平面。裁剪、缩放与灰度换算仍由 `main/book/book_cover.c` 统一负责，这一层不做第二套。
+见 [include/read_pico_webp.h](include/read_pico_webp.h)：签名判断、只读头部尺寸、按像素上限解码成 RGB565 平面。裁剪、缩放与灰度换算仍由 `main/book/book_cover.c` 统一负责，这一层不做第二套。漫画灰阶适配器位于 `main/book/book_webp.c`，复用本组件的同一份解码器，内部工作区保留 PSRAM 余量。
 
-See [include/read_pico_webp.h](include/read_pico_webp.h): signature check, header-only dimensions, and a pixel-capped RGB565 decode. Cropping, scaling and grayscale stay in `main/book/book_cover.c`; this layer owns no second implementation.
+See [include/read_pico_webp.h](include/read_pico_webp.h): signature check, header-only dimensions, and a pixel-capped RGB565 decode. Cropping, scaling and grayscale stay in `main/book/book_cover.c`; this layer owns no second implementation. The grayscale adapter in `main/book/book_webp.c` shares this decoder and retains PSRAM headroom for internal workspaces.
 
 ## 体积 / Footprint
 

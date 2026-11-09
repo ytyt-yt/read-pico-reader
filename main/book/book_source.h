@@ -1,8 +1,8 @@
 /*
  * SPDX-FileCopyrightText: 2026 mindreset
  * SPDX-License-Identifier: Apache-2.0
- * 中文：单实例 TXT/EPUB 书源与章节进度接口。
- * English: Singleton TXT/EPUB source and chapter progress interface.
+ * 中文：单实例 TXT/EPUB/CBZ 书源与章节进度接口。
+ * English: Singleton TXT/EPUB/CBZ source and chapter progress interface.
  * 冻结：正文由调用方释放；不依赖 UI。
  * Frozen: The caller frees loaded text; no UI dependencies.
  */
@@ -15,6 +15,7 @@
 typedef enum {
     BOOK_KIND_TXT, ///< 文本 / Plain text
     BOOK_KIND_EPUB, ///< EPUB 容器 / EPUB container
+    BOOK_KIND_CBZ, ///< CBZ 漫画，每图一章 / CBZ comic, one image per chapter
 } book_kind_t;
 /// 打开并替换当前书源。/ Open and replace the current source.
 esp_err_t book_open(const char *path);
@@ -58,10 +59,11 @@ esp_err_t book_chapter_load_blocks_anchor(size_t i, const char *anchor,
 esp_err_t book_chapter_load_blocks_target(size_t i, const char *anchor,
                                            size_t source_offset, size_t *text_offset,
                                            html_text_t *out);
-/// 读取当前 EPUB 章内图片。/ Read an image from the current EPUB chapter.
+/// 读取当前 EPUB/CBZ 章内图片；png 标志保留兼容，WebP 由签名识别。/ Read an EPUB/CBZ image; retain the PNG hint, recognizing WebP by signature.
 esp_err_t book_chapter_image(size_t chapter, const char *src, uint8_t **data, size_t *size, bool *png);
 /// TXT 为源文件字节；EPUB 为 spine 原始 HTML 未压缩累计字节，不是 ZIP 文件大小。
 /// TXT uses source-file bytes; EPUB uses cumulative uncompressed spine HTML bytes, not ZIP file size.
+/// CBZ 每图计一单位，进度与图片压缩大小无关。/ CBZ uses one unit per image, independent of compressed size.
 uint32_t book_total_bytes(void);
 /// TXT 为原文件章起点；EPUB 为前序 spine 原始 HTML 字节总和。
 /// TXT uses original chapter offsets; EPUB uses the sum of preceding spine source HTML bytes.

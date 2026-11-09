@@ -6,6 +6,7 @@
  */
 #include "boot_state.h"
 #include "kiiko_board_config.h"
+#include "ui/ui_nav_layout.h"
 #include <stddef.h>
 #include <string.h>
 #include "esp_log.h"
@@ -67,7 +68,7 @@ static bool path_valid(const char *path, bool empty) {
     return true;
 }
 static bool resume_valid(const pico_resume_t *r) {
-    return r && r->tab < 4 && r->reader <= 1 && r->fullscreen <= 1 &&
+    return r && ui_nav_page_valid(r->tab) && r->reader <= 1 && r->fullscreen <= 1 &&
         (!r->reader || r->tab == 1) && path_valid(r->path, !r->reader);
 }
 static uint32_t packed_checksum(const uint8_t *data,size_t size) {

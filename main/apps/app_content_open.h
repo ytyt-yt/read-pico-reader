@@ -12,6 +12,15 @@
 
 bool app_book_request_open(const char *path);
 bool app_book_request_open_from_home(const char *path);
+/// 漫画章节沿用唯一阅读器，返回原章节页及页码。/ Comic chapters use the sole reader and return to the source chapter page.
+bool app_book_request_comic(const char *path, int chapter_page);
+void app_comics_request_chapters(const char *directory, int page, const char *message);
+bool app_comics_request_resume(const char *directory);
+bool app_comics_resume_context(char *directory, size_t capacity);
+/// 仅锁屏时保存浏览页码，深睡开章时按同目录恢复。/ Save browse pages only at lock and recover matching pages when opening after deep sleep.
+void app_comics_save_navigation(const char *directory, int page);
+int app_comics_saved_page(const char *directory);
+void app_comics_cover_mode_changed(void);
 /// 一次性深睡恢复；保持保存的正文位置与全屏状态。/ One-shot deep-sleep resume with saved position and fullscreen state.
 bool app_book_request_resume(const char *path, bool fullscreen);
 /// 仅导出已打开阅读上下文。/ Export only an already open reader context.

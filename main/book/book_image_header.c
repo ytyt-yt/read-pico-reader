@@ -2,6 +2,9 @@
 #include "book_cover.h"
 #include <string.h>
 
+bool book_image_is_webp(const uint8_t *data, size_t size) {
+    return book_webp_is(data, size);
+}
 bool book_jpeg_frame(const uint8_t *data, size_t size, uint8_t *sof,
                        unsigned *width, unsigned *height) {
     if (!data || size < 4 || data[0] != 0xFF || data[1] != 0xD8) return false;
