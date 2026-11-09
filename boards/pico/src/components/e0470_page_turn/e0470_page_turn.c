@@ -28,10 +28,10 @@ static const char* TAG = "e0470_turn";
 
 #define TURN_DEFAULT_BANDS E0470_TURN_FAST_BANDS
 #define TURN_BANDS_MAX 32
-// 阅读翻页和水波纹波形最多 64 相（波形表上限）；水波纹增加擦白/重推黑后为 53 相。
-// Reader turns and ripple waveforms may reach 64 phases (waveform table ceiling); ripple is 53
-// after the erase/black-redrive insertion.
-#define TURN_PHASE_CAP 64
+// 完整48相文字水波纹加12相擦白、4相补黑及额外一相释放，共65相；相位索引仍在int8范围内。
+// Complete48-phase text ripple adds12 white,4 black and one release phase for65 total,
+// still within the int8 phase-index range.
+#define TURN_PHASE_CAP 65
 #define TURN_LINE_MAX 2048
 
 static uint8_t (*s_lut)[1024];
@@ -222,8 +222,8 @@ static void assign_bands(
 }
 
 static bool build_luts(const EpdWaveformPhases* gl) {
-    // Pico按需把最多64相LUT放PSRAM；根页八相补白不截断，不增加内部帧缓冲。
-    // Allocate at most64 KiB in PSRAM on demand; preserve all root-white phases without another internal framebuffer.
+    // Pico按需把最多65相LUT放PSRAM；原有灰阶和收尾不截断，不增加内部帧缓冲。
+    // Allocate at most65 KiB in PSRAM on demand; retain all gray/release phases without another internal framebuffer.
     if (!s_lut) {
         s_lut = heap_caps_aligned_alloc(16, sizeof(uint8_t[TURN_PHASE_CAP][1024]),
                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);

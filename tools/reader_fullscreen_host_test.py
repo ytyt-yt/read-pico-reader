@@ -173,6 +173,7 @@ int main(void){
  assert(app_book_request_resume("/sdcard/book.epub",false)&&!s_requested_fullscreen&&s_requested_resume_mode);
  default_fullscreen=false;
  assert(!app_book_request_open(NULL)&&!app_book_request_open(""));
+ for(effect=1;effect<=3;effect+=2)
  for(int full=0;full<2;++full)for(int tools=0;tools<2;++tools)for(int dir=-1;dir<=1;dir+=2){
   reset(full,tools,2,0);size_t destination=book_layout_page_start_offset(s_page+dir);
   s_zoom_bits=malloc(32);assert(s_zoom_bits);s_zoom_bits_bytes=32;

@@ -2576,7 +2576,8 @@ static void draw_reading_settings(uint8_t* fb) {
     if (pages) snprintf(interval, sizeof(interval), "每 %u 页", pages);
     else copy_text(interval, sizeof(interval), "不强制");
     draw_reading_card(fb, 0, "自动全刷", interval, true);
-    draw_reading_card(fb, 1, "翻页效果", app_settings_reader_turn_effect()==2?"速读黑白":
+    draw_reading_card(fb, 1, "翻页效果", app_settings_reader_turn_effect()==3?"清晰水波纹":
+        app_settings_reader_turn_effect()==2?"速读黑白":
         app_settings_reader_turn_effect()?"水波纹":"普通",true);
     draw_reading_card(fb, 2, "翻页模式", app_settings_reader_vertical_turn() ? "上下翻页" : "左右翻页", false);
     draw_reading_toggle(fb, 0, "电源键翻页", NULL, app_settings_reader_power_turn());
@@ -5614,7 +5615,7 @@ static app_redraw_t turn_page(app_ctx_t* ctx, int dir) {
     s_reader_turn_pending = !chrome_changed && redraw == APP_REDRAW_AREA && from_text_frame &&
         book_layout_page_image_count(s_page) == 0 && !app_settings_book_background_path()[0];
     s_water_turn_pending = !chrome_changed && redraw == APP_REDRAW_AREA && !s_reader_cleanup &&
-                           app_settings_reader_turn_effect() == 1 && from_body_frame;
+                           (app_settings_reader_turn_effect() == 1 || app_settings_reader_turn_effect() == 3) && from_body_frame;
     s_water_turn_dir = dir > 0 ? E0470_TURN_RTL : E0470_TURN_LTR;
     return chrome_changed ? APP_REDRAW_PAGE : redraw;
 }
@@ -6061,7 +6062,13 @@ static app_redraw_t reading_settings_action(app_ctx_t *ctx, uint16_t x, uint16_t
         app_settings_set_reader_full_pages(options[next]);
         s_turns = 0;
     } else if (ui_rect_hit(reading_setting_rect(1), x, y)) {
-        app_settings_set_reader_turn_effect((app_settings_reader_turn_effect()+1)%3);
+        // 两个水波纹相邻，保留旧模式编号，方便同页字体与灰边对照。
+        // Keep both ripple choices adjacent while retaining persisted IDs for direct edge comparisons.
+        static const uint8_t effects[]={0,1,3,2};
+        unsigned next=0;
+        for(unsigned i=0;i<sizeof(effects);++i)
+            if(app_settings_reader_turn_effect()==effects[i]) { next=(i+1)%sizeof(effects); break; }
+        app_settings_set_reader_turn_effect(effects[next]);
         // 新模式从新一轮计数开始，首次翻页不继承旧模式的自动全刷欠账。
         // Start a fresh cleanup cycle so the first turn does not inherit the previous effect's cleanup debt.
         s_turns=0;

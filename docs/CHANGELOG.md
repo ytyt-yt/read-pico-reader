@@ -4,6 +4,8 @@
 
 - 修复漫画搜索键盘与底部导航重叠，补齐漫画界面中英翻译；章节数量、进度及提示先翻译再格式化，漫画名、文件名与输入保留原文。
   Keep comic search keys above bottom navigation and complete bilingual comic labels, counts, progress and notices while preserving user names, filenames and input.
+- Pico新增独立“清晰水波纹”，与原水波纹相邻切换并保存选择；采用完整48相GL16及同灰迁移，追加12相擦白、4相补黑和三相末尾保持，共65相。清晰文字档使用FULL扫描及127行预填；原水波纹、字体、图文刷新和高压释放顺序保持，备份兼容旧版及S31。
+  Pico adds a separate persisted Clear ripple choice beside original Ripple, using complete48-phase GL16 and equal-gray transitions with twelve white/four black extra phases and three final holds for65 total. Clear text uses FULL scanning and127-line prefill; retain original ripple, fonts, image refresh and HV release order. Backups remain compatible with older firmware/S31.
 - 修复漫画封面在浅睡唤醒后停留占位图、CBZ内页码跳转被拒绝，以及封面定时核对阻塞界面；双板支持图片页跳转及返回原位置，封面指纹核对在后台执行。
   Fix comic covers stalled after shallow wake, rejected page jumps within CBZ files and UI stalls during periodic cover checks. Both boards support image-page jumps and undo, with cover fingerprints checked in the background.
 - 漫画适配当前Pico/S31双板构建，WebP复用共享解码器并保留可取消灰阶预解码。

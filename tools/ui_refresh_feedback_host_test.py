@@ -405,7 +405,8 @@ int main(void){
 
  // 真实图片翻页必须输出水波纹，不能在已选水波纹时偷偷回退普通GL16。
  // Actual image turns must invoke ripple rather than silently routing the selected effect to plain GL16.
- test_effect=1;test_hide_images=false;test_image.gray=(uint8_t*)"gray";
+ test_hide_images=false;test_image.gray=(uint8_t*)"gray";
+ for(test_effect=1;test_effect<=3;test_effect+=2)
  for(int kind=BOOK_KIND_EPUB;kind<=BOOK_KIND_CBZ;++kind)
  for(int background=0;background<2;++background)
  for(int from=0;from<3;++from)for(int to=0;to<3;++to)for(int dir=-1;dir<=1;dir+=2){
@@ -425,7 +426,7 @@ int main(void){
    assert(test_water_dir==(dir>0?E0470_TURN_RTL:E0470_TURN_LTR));
    assert(test_tick_us==prior&&test_tick_sets==sets+2&&s_reader_body_frame&&!s_water_turn_pending);
  }
- test_background=false;test_kind=BOOK_KIND_EPUB;s_chapter=s_page=0;
+ test_effect=1;test_background=false;test_kind=BOOK_KIND_EPUB;s_chapter=s_page=0;
  test_push_error=EPD_DRAW_ERROR;trace_count=0;present(&ctx,paint_reading(&ctx,MODE_GL16));
  assert(!s_reader_body_frame);test_push_error=0;
  assert(turn_page(&ctx,1)==APP_REDRAW_AREA&&!s_water_turn_pending);

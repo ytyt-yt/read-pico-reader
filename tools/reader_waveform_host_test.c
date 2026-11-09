@@ -102,8 +102,8 @@ int main(void) {
         }
     }
     assert(changed > 0 && !memcmp(saved, old->luts, sizeof(saved)));
-    // 水波纹现在复用这套已验证文字序列：相同灰阶全保持，不能改字形目标、普通翻页或原表。
-    // Ripple now shares these proven text phases: equal grays hold, retaining glyph targets, ordinary turns and vendor tables.
+    // 保留旧文字辅助表的同灰保持及灰边调序；水波纹在下方独立检查完整迁移。
+    // Retain the legacy helper's equal-gray holds and edge ordering; test full ripple transitions below.
     const EpdWaveformPhases* raw=e0470_waveform_phases(&E0470_WAVEFORM,MODE_GL16);
     unsigned held=0,edge_runs=0;
     for(int to=0;to<16;++to) {
@@ -125,7 +125,7 @@ int main(void) {
         }
     }
     assert(held==16&&edge_runs>=10);
-    puts("PASS: reader ripple holds all 16 unchanged grays and reduces at least ten gray-edge dark runs; existing text profile, targets and 37 phases unchanged");
+    puts("PASS: legacy text helper holds all16 unchanged grays and reduces at least ten gray-edge dark runs; targets and37 phases unchanged");
     // 普通翻页柔和档：厂商 GL16 原序，等灰全保持；末尾定稿保持之前补十二相整屏擦白，
     // 再补四相重推黑，抵消整屏白推对黑字的冲淡。
     // Soft ordinary turn: vendor GL16 phases, every equal pair held, twelve whole-panel white
@@ -169,6 +169,7 @@ int main(void) {
                 assert(e0470_phase_action(st, drive + 16 + i, to, from) == 0);
             }
     puts("PASS: soft ordinary turn keeps vendor sequences and equal-gray refresh, drops only black-on-black erase phases, inserts twelve whole-white phases and four black re-drive phases before the vendor settle holds");
+    {
     const EpdWaveform* water_wave=display_reader_water_waveform();
     const EpdWaveformPhases* water=e0470_waveform_phases(water_wave,MODE_GL16);
     assert(water_wave==display_reader_water_waveform() && water && water->phases==E0470_GL16_FRAMES+16);
@@ -193,6 +194,43 @@ int main(void) {
         if(from==to && from>0 && from<15)for(int f=0;f<water->phases;++f)assert(e0470_phase_action(water,f,to,from)==0);
     }
     puts("PASS: Pico reader ripple retains every original gray transition/three settle holds, twelve whole-white/four black-redrive phases, equal middle grays held,53 phases and cached identity");
-    puts("PASS: all 256 pairs, endpoints, holds, first/final actions, pulse counts, 37-frame timing and original LUT retained; optical validation pending");
+    }
+    {
+    const EpdWaveformPhases* water_src=e0470_waveform_phases(&E0470_FULL_WAVEFORM,MODE_GL16);
+    assert(water_src && water_src->phases==E0470_FULL_GL16_FRAMES);
+    uint8_t full_saved[E0470_FULL_GL16_FRAMES*16*4];
+    memcpy(full_saved,water_src->luts,sizeof(full_saved));
+    const EpdWaveform* water_wave=display_reader_clear_water_waveform();
+    const EpdWaveformPhases* water=e0470_waveform_phases(water_wave,MODE_GL16);
+    assert(water_wave!=display_reader_water_waveform() && water_wave==display_reader_clear_water_waveform() && water && water->phases==65);
+    assert(water_wave->temp_intervals==E0470_FULL_WAVEFORM.temp_intervals && !water->phase_times);
+    // 完整48相GL16不调序、不裁擦除或饱和段；同灰仍按原序列重建，防止字缘漂移积累。
+    // Keep all48 GL16 phases in order, including erase/saturation and equal-gray edge re-drive.
+    const int water_drive=E0470_FULL_GL16_FRAMES-2;
+    unsigned equal_middle_redrives=0;
+    for(int from=0;from<16;++from)for(int to=0;to<16;++to){
+        for(int f=0;f<water_drive;++f)
+            assert(e0470_phase_action(water,f,to,from)==e0470_phase_action(water_src,f,to,from));
+        for(int f=water_drive;f<water_drive+12;++f)
+            assert(e0470_phase_action(water,f,to,from)==(to==15?2:0));
+        for(int f=water_drive+12;f<water_drive+16;++f)
+            assert(e0470_phase_action(water,f,to,from)==(to==0?1:0));
+        for(int f=0;f<2;++f){
+            assert(e0470_phase_action(water,water_drive+16+f,to,from)==
+                   e0470_phase_action(water_src,water_drive+f,to,from));
+        }
+        for(int f=0;f<3;++f)assert(e0470_phase_action(water,water_drive+16+f,to,from)==0);
+        if(from==to && from>0 && from<15) {
+            unsigned actions=0;
+            for(int f=0;f<water_drive;++f)actions+=e0470_phase_action(water,f,to,from)!=0;
+            assert(actions>0);
+            ++equal_middle_redrives;
+        }
+    }
+    assert(equal_middle_redrives==14 && !memcmp(full_saved,water_src->luts,sizeof(full_saved)));
+    assert(!memcmp(saved,old->luts,sizeof(saved)));
+    puts("PASS: Pico Clear ripple retains all256 complete48-phase GL16 transitions,14 equal-middle-gray re-drives, twelve whole-white/four black-redrive phases, three final holds,65 phases and cached identity");
+    puts("PASS: legacy text/ordinary/DU profiles and source LUTs retained; optical validation pending");
+    }
     return 0;
 }

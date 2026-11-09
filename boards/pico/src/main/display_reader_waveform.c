@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0
- * 中文：文字水波纹的柔和灰边，保留抗锯齿目标、驱动计数和周期清残影。
- * English: Soften gray-edge transients on text ripple turns, preserving antialiased targets,
- * pulse counts and periodic cleanup.
- * 冻结：仅白底到中灰提前最多两相回浅；黑/白端点、其他迁移、原表及帧时序不改。
- * 相同驱动计数不保证光学灰度相同；此调序需实屏对比深浅与残影。
- * Frozen: Advance at most two settling phases only for white-to-midgray pairs. Keep endpoints,
- * all other pairs, original tables and frame timing. Equal pulse counts do not guarantee equal
- * optical grays; validate this ordering on the panel against tone and ghosting.
- * User revision2026-10-29: the reader-ripple wrapper inserts four changed-white
- * phases before the original three settle holds; the underlying37-phase function stays unchanged.
+ * 中文：Pico阅读波形；保留原水波纹，清晰水波纹使用完整灰阶迁移。
+ * English: Pico reader waveforms; retain original ripple and use complete gray transitions
+ * for the separate Clear ripple profile.
+ * 冻结：旧文字辅助表仅白底到中灰提前最多两相回浅，保持原驱动计数。
+ * 清晰水波纹复用完整48相GL16及同灰迁移，追加12相擦白、4相补黑并保留末尾3相保持。
+ * 原水波纹、字形、其他路径及原表保持；扫描档位由显示出口选择。
+ * Frozen: The legacy text helper advances at most two white-to-midgray settling phases,
+ * retaining pulse counts. Clear ripple reuses complete48-phase GL16, including equal-gray
+ * transitions, twelve white/four black extra phases and three final holds. Retain original ripple,
+ * glyphs, other paths and source tables; the display outlet selects scan timing.
  */
 #include "display_reader_waveform.h"
 #include "e0470_epaper_waveform.h"
@@ -234,4 +234,63 @@ const EpdWaveform* display_reader_water_waveform(void) {
     s_water_waveform.temp_intervals=source->temp_intervals;
     s_water_ready=true;
     return &s_water_waveform;
+}
+
+// 完整灰阶迁移重建字缘，包括逻辑同灰但物理可能偏离的像素；保留原清残影补相。
+// Complete gray transitions re-drive edges, including equal logical grays whose physical tone
+// may have drifted; retain the existing ghost-cleanup phases.
+#define READER_CLEAR_WATER_WHITE 12
+#define READER_CLEAR_WATER_BLACK 4
+#define READER_CLEAR_WATER_SOURCE_HOLDS 2
+#define READER_CLEAR_WATER_HOLDS 3
+#define READER_CLEAR_WATER_PHASES (E0470_FULL_GL16_FRAMES + READER_CLEAR_WATER_WHITE + READER_CLEAR_WATER_BLACK + \
+                            READER_CLEAR_WATER_HOLDS - READER_CLEAR_WATER_SOURCE_HOLDS)
+_Static_assert(READER_CLEAR_WATER_PHASES <= 65, "Reader ripple exceeds the page-turn phase limit");
+static uint8_t s_clear_water_data[READER_CLEAR_WATER_PHASES][16][4];
+static const EpdWaveformPhases s_clear_water_phases = {
+    READER_CLEAR_WATER_PHASES, (const uint8_t*)s_clear_water_data, NULL
+};
+static const EpdWaveformPhases* s_clear_water_ranges[] = {&s_clear_water_phases};
+static const EpdWaveformMode s_clear_water_mode = {MODE_GL16, 1, s_clear_water_ranges};
+static const EpdWaveformMode* s_clear_water_modes[] = {&s_clear_water_mode};
+static EpdWaveform s_clear_water_waveform = {
+    .num_modes=1, .num_temp_ranges=1, .mode_data=s_clear_water_modes
+};
+static bool s_clear_water_ready;
+
+static void clear_water_set_action(int phase, int to, int from, int action) {
+    const int shift = 6 - 2 * (from % 4);
+    s_clear_water_data[phase][to][from / 4] = (uint8_t)(
+        (s_clear_water_data[phase][to][from / 4] & ~(3u << shift)) | ((unsigned)action << shift)
+    );
+}
+
+const EpdWaveform* display_reader_clear_water_waveform(void) {
+    if (s_clear_water_ready) return &s_clear_water_waveform;
+    const EpdWaveform* source=&E0470_FULL_WAVEFORM;
+    const EpdWaveformPhases* phases=e0470_waveform_phases(source,MODE_GL16);
+    if (!phases || !phases->luts || phases->phase_times ||
+        phases->phases!=E0470_FULL_GL16_FRAMES) return source;
+    const int drive=phases->phases-READER_CLEAR_WATER_SOURCE_HOLDS;
+    for (int f=drive;f<phases->phases;++f)
+        for(int i=0;i<64;++i) if(phases->luts[f*64+i]) return source;
+    memcpy(s_clear_water_data,phases->luts,(size_t)drive*64);
+    // 完整原表末尾只有两相保持；再加一相，保留阅读路径原有三相释放时间。
+    // The full source has two final holds; append one to retain the reader's three release phases.
+    memset(s_clear_water_data+drive,0,(READER_CLEAR_WATER_WHITE+READER_CLEAR_WATER_BLACK+READER_CLEAR_WATER_HOLDS)*64);
+    memcpy(s_clear_water_data+drive+READER_CLEAR_WATER_WHITE+READER_CLEAR_WATER_BLACK,
+           phases->luts+(size_t)drive*64,READER_CLEAR_WATER_SOURCE_HOLDS*64);
+    // 12 相全屏擦白：所有目标为白的像素（含本来就白的空白区）都推白，消除上次残留。
+    // Twelve full-panel white phases push every white target, including already-white blanks.
+    for(int f=drive;f<drive+READER_CLEAR_WATER_WHITE;++f)
+        for(int from=0;from<=15;++from)
+            clear_water_set_action(f,15,from,2);
+    // 4 相重推黑：所有目标为黑的像素补黑，抵消整屏白推造成的淡墨。
+    // Four black re-drive phases darken every black target after the whole-panel white push.
+    for(int f=drive+READER_CLEAR_WATER_WHITE;f<drive+READER_CLEAR_WATER_WHITE+READER_CLEAR_WATER_BLACK;++f)
+        for(int from=0;from<=15;++from)
+            clear_water_set_action(f,0,from,1);
+    s_clear_water_waveform.temp_intervals=source->temp_intervals;
+    s_clear_water_ready=true;
+    return &s_clear_water_waveform;
 }

@@ -14,7 +14,8 @@
 #include "app_config.h"
 #include "settings.h"
 #include "e0470_epaper_waveform.h"
-uint8_t app_settings_reader_turn_effect(void) {return 0;}
+static uint8_t reader_effect;
+uint8_t app_settings_reader_turn_effect(void) {return reader_effect;}
 bool display_reader_fast_text_prepare(EpdiyHighlevelState *hl,EpdRect area) {(void)hl;(void)area;assert(false);return false;}
 const EpdWaveform* display_reader_fast_text_waveform(void) {assert(false);return NULL;}
 app_main_refresh_mode_t app_settings_main_refresh_mode(void) {return APP_MAIN_REFRESH_NORMAL;}
@@ -49,8 +50,10 @@ enum EpdDrawError e0470_update_regions(EpdiyHighlevelState* hl, EpdRect area,
 }
 static const EpdWaveform soft_gray = {4};
 static const EpdWaveform reader_soft = {5};
+static const EpdWaveform reader_clear = {6};
 const EpdWaveform* display_reader_text_waveform(void) {return &reader_soft;}
 const EpdWaveform* display_reader_water_waveform(void) {return &reader_soft;}
+const EpdWaveform* display_reader_clear_water_waveform(void) {return &reader_clear;}
 // 本组隔离波形工厂；实际擦白LUT由pico_main_clean_host_test逐迁移覆盖。/ Isolate waveform factories here; pico_main_clean_host_test covers real whitening LUTs.
 const EpdWaveform* display_main_clean_waveform_with_phases(const EpdWaveform* wave,enum EpdDrawMode mode,unsigned white) {
     assert(wave&&(mode==MODE_GL16||mode==MODE_DU)&&white>=6&&white<=8);return wave;
@@ -79,6 +82,7 @@ static unsigned drive_releases, release_failures;
 static int64_t now_us = 1000000;
 static const EpdWaveform *waveform_at_draw;
 static const EpdWaveform *expected_water_waveform=&reader_soft;
+static int expected_water_scan=READ_PICO_EPD_SCAN_FAST;
 static enum EpdDrawError water_result;
 static int water_calls;
 static EpdRect last_area;
@@ -92,7 +96,7 @@ enum EpdDrawError e0470_page_turn_with_waveform_compact(EpdiyHighlevelState* hl,
     assert(ota_display_depth);
     assert(hl&&area.width>0&&dir==E0470_TURN_RTL);
     assert(waveform==(expected_turn_bands==1?display_main_gray_waveform():expected_water_waveform)&&bands==expected_turn_bands);
-    ++water_calls;assert(last_scan==READ_PICO_EPD_SCAN_FAST);
+    ++water_calls;assert(last_scan==expected_water_scan);
     assert(prefill==127);
     return water_result;
 }
@@ -319,14 +323,35 @@ int main(void) {
     // 图片水波纹先用完整预装余量，成功后恢复普通队列；不改变时钟。
     // Image ripple uses full prefill headroom, restores ordinary queues on success and keeps clocks unchanged.
     water_result = EPD_DRAW_SUCCESS;
+    for (reader_effect=1;reader_effect<=3;reader_effect+=2)
     for (int bulk = 0; bulk < 2; ++bulk) {
+        expected_water_waveform=reader_effect==3?&reader_clear:&reader_soft;
+        expected_water_scan=reader_effect==3?READ_PICO_EPD_SCAN_FULL:READ_PICO_EPD_SCAN_FAST;
         display_set_bulk_io(bulk != 0);
         int prior_clocks = clocks, prior_water = water_calls;
         assert(update_display_water_turn(&hl, (EpdRect){0, 0, 16, 16}, E0470_TURN_RTL) == EPD_DRAW_SUCCESS);
         assert(water_calls == prior_water + 1 && clocks == prior_clocks);
         assert(prefill == (bulk ? 127 : 32) && last_scan == READ_PICO_EPD_SCAN_FULL);
+        assert(!drive_active&&!ota_display_depth);
+    }
+    // 清晰档失败仍沿原兜底恢复；空闲期间不能新增正文扫描或重驱旧帧。
+    // Clear failures retain existing recovery; idle never scans the body or re-drives old history.
+    reader_effect=3;expected_water_waveform=&reader_clear;expected_water_scan=READ_PICO_EPD_SCAN_FULL;
+    for(int failure=0;failure<3;++failure) {
+        water_calls=draws=clears=0;
+        water_result=failure==0?EPD_DRAW_SUCCESS:failure==1?EPD_DRAW_NO_PHASES_AVAILABLE:EPD_DRAW_OTHER_ERROR;
+        memcpy(front,target,FB_BYTES);memset(back,0x55,FB_BYTES);
+        assert(update_display_water_turn(&hl,(EpdRect){0,0,16,16},E0470_TURN_RTL)==EPD_DRAW_SUCCESS);
+        assert(water_calls==1&&!drive_active&&!ota_display_depth&&last_scan==READ_PICO_EPD_SCAN_FULL);
+        if(failure==1)assert(draws==1&&waveform_at_draw==&reader_clear);
+        if(failure==2)assert(clears==1&&correct_target_at_draw);
+        int old_water=water_calls,old_draws=draws,old_clears=clears;
+        for(int now=1000;now<=10000;now+=100)rails_idle_check(now);
+        assert(water_calls==old_water&&draws==old_draws&&clears==old_clears);
     }
     expected_water_waveform=&E0470_WAVEFORM;
+    expected_water_scan=READ_PICO_EPD_SCAN_FAST;
+    reader_effect=3;
     for (int failure=0;failure<3;++failure) {
         memcpy(front,target,FB_BYTES);memset(back,0x55,FB_BYTES);
         water_calls=draws=clears=0;
@@ -337,6 +362,7 @@ int main(void) {
         if (failure==2) assert(clears==1&&correct_target_at_draw);
     }
     expected_water_waveform=&reader_soft;
+    reader_effect=0;
     assert(!ota_display_depth);
     // 无变化刷新刚上电也必须中性；静置和重试不能新增任何像素扫描。
     // A no-change update must release a freshly powered drive; idle and retries must add no scans.
