@@ -36,6 +36,8 @@ static int reader_waveform,soft_turn_waveform;
 static const int *display_main_gray_waveform(void){return &reader_waveform;}
 static const int *display_reader_soft_turn_waveform(void){return &soft_turn_waveform;}
 static bool s_reader_clock_pending,s_input_settle,s_shelf_feedback_pending,s_cover_batch_present_pending,s_shelf_page_pending;
+static bool s_reader_body_frame;
+static void book_comic_cache_pause(void){}
 static bool s_reader_image_refresh_pending,s_reader_cleanup,s_reader_turn_pending,s_water_turn_pending,s_clear_confirm,s_reader_fullscreen,s_reader_footer_pending,s_reader_text_frame;
 static int64_t s_reader_footer_due_ms;
 static bool s_toolbar;
@@ -106,13 +108,15 @@ unit+='\n'.join(line for line in (root/'main/ui/ui_reader_layout.h').read_text()
 for name in ('reader_area','reader_fullscreen_progress_area','progress_rect'):
  unit+=function(name,root/'main/apps/app_book.c')+'\n'
 unit+='static enum EpdDrawError reader_present_crop(void *hl,const int *wave,int mode,EpdRect area,bool full){return full?update_display_area_full_with(hl,wave,mode,area):update_display_area_diff_with(hl,wave,mode,area); }\n'
+unit+='static enum EpdDrawError update_display_image_turn(void *hl,EpdRect area,int dir){return update_display_water_turn(hl,area,dir); }\n'
+unit+=function('present_water_turn',root/'main/apps/app_book.c')+'\n'
 unit+=function('present',root/'main/apps/app_book.c')
 unit+=r'''
 static void reset(void){
  calls=selected=rendered=prepares=fail=images=tick=0;background=immersive=false;s_view=s_presented_view=READING;
  s_reader_panel=READER_PANEL_NONE;s_mode=MODE_GL16;s_reader_fullscreen=true;
  s_reader_footer_pending=true;s_reader_cleanup=false;s_water_turn_pending=false;s_reader_turn_pending=true;
- s_toolbar=s_clear_confirm=s_reader_image_refresh_pending=s_reader_clock_pending=false;s_reader_text_frame=false;
+ s_toolbar=s_clear_confirm=s_reader_image_refresh_pending=s_reader_clock_pending=false;s_reader_text_frame=s_reader_body_frame=false;
  s_turns=7;
  s_area=reader_area();memset(areas,0,sizeof(areas));memset(modes,0,sizeof(modes));memset(waves,0,sizeof(waves));
 }

@@ -42,6 +42,29 @@ static void tracked_free(void *p){
 #define free tracked_free
 #include "book_txt.c"
 #include "book_source.c"
+// TXT用例不允许进入漫画路径；空句柄关闭是通用书源的正常清理。
+// TXT fixtures must never enter comic routes; closing a null handle is normal source cleanup.
+esp_err_t book_cbz_open(const char *p,book_cbz_t **b){(void)p;*b=NULL;assert(!"TXT entered CBZ open");return ESP_FAIL;}
+void book_cbz_close(book_cbz_t *b){assert(!b);}
+size_t book_cbz_count(const book_cbz_t *b){(void)b;assert(!"TXT entered CBZ count");return 0;}
+esp_err_t book_cbz_title(const book_cbz_t *b,size_t page,char *out,size_t cap){
+ (void)b;(void)page;(void)out;(void)cap;assert(!"TXT entered CBZ title");return ESP_FAIL;
+}
+esp_err_t book_cbz_load(book_cbz_t *b,size_t page,html_text_t *out){
+ (void)b;(void)page;(void)out;assert(!"TXT entered CBZ load");return ESP_FAIL;
+}
+esp_err_t book_cbz_image(book_cbz_t *b,size_t page,const char *src,uint8_t **data,size_t *size,bool *png){
+ (void)b;(void)page;(void)src;(void)data;(void)size;(void)png;assert(!"TXT entered CBZ image");return ESP_FAIL;
+}
+esp_err_t book_cbz_dimensions(book_cbz_t *b,size_t page,const char *src,unsigned *w,unsigned *h){
+ (void)b;(void)page;(void)src;(void)w;(void)h;assert(!"TXT entered CBZ dimensions");return ESP_FAIL;
+}
+#if KIIKO_BOARD_METALIO47
+esp_err_t book_cbz_suspend_io(book_cbz_t *b){(void)b;assert(!"TXT suspended CBZ");return ESP_FAIL;}
+esp_err_t book_cbz_resume_io(book_cbz_t *b,const char *p){(void)b;(void)p;assert(!"TXT resumed CBZ");return ESP_FAIL;}
+esp_err_t book_comic_cache_suspend_io(void){assert(!"TXT suspended comic cache");return ESP_FAIL;}
+void book_comic_cache_resume_io(const char *p){(void)p;assert(!"TXT resumed comic cache");}
+#endif
 void html_text_free(html_text_t *text){(void)text;assert(!"TXT test entered EPUB cleanup");}
 bool book_index_cache_prepare(const char *source,const char *tag,uint32_t version,char *path,size_t cap,book_index_cache_header_t *key){
  if(disable_cache)return false;

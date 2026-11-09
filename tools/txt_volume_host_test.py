@@ -27,6 +27,7 @@ base = base.replace('assert(caps==3);', 'assert(caps==3);if(fail_volumes&&n==204
 base = base.replace('assert(book_navigation_count()==count);', 'if(book_navigation_count()!=count){for(size_t g=0;g<book_navigation_volume_count();++g){char title[160];book_navigation_volume_title(g,title,sizeof(title));fprintf(stderr,"GROUP%zu: %s\\n",g,title);}}assert(book_navigation_count()==count);')
 
 ui = constant(ROOT/'tools/test_book_toc.py', 'HARNESS').split('size_t book_navigation_volume_count(void){')[0].split('esp_err_t book_navigation_title(')[0]
+ui = ui.replace('int book_kind(void){return 0;}', '')
 ui = ui.replace('if(px==30){assert(background==0xc0||background==255);', 'if(px==30){assert(background==0xc0||background==255||background==0xe0||background==0xd8);')
 ui = ui.replace('else assert(background==0xe0);', 'else assert(background==0xe0||background==0xd8||background==255||background==0xc0);')
 ui = ui.replace('int ui_text_effective_px(int px){return px;}', 'static int test_scale=100;int ui_text_effective_px(int px){return px*test_scale/100;}')

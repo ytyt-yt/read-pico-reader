@@ -883,12 +883,13 @@ int main(void) {
     puts("PASS: system roots honor Water, child taps/top-left stay ordinary, edge returns use logical portrait LTR, scoped navigation restored");
     puts("PASS: S31 edge/central right-swipe return admission,one output,short/status/multitouch/refused boundaries");
     puts("PASS: real loop with real anti-fade: idle refresh, no transfer/modal-owner refresh or wake; legacy quick/PIN/sleep gates retained");
-    // 实际音量事件经过主键派发：四页循环、子页映射和覆盖层/升级保护。
-    // Actual volume events share root keys while retaining child mappings and overlay/update guards.
-    for(int tab=0;tab<4;++tab)for(int dir=-1;dir<=1;dir+=2){
-        reset();enable_main_tabs();fake_root_index=tab;volume_step=0;volume_value=dir;
+    // 实际音量事件经过主键派发：五页循环、子页映射和覆盖层/升级保护。
+    // Actual volume events cycle five roots while retaining child mappings and overlay/update guards.
+    const int volume_pages[]={0,1,UI_NAV_COMICS,2,3};
+    for(int slot=0;slot<5;++slot)for(int dir=-1;dir<=1;dir+=2){
+        reset();enable_main_tabs();fake_root_index=volume_pages[slot];volume_step=0;volume_value=dir;
         add(0,0,0,0);add(0,0,0,0);run();
-        assert(volume_tab==(tab+(dir<0?3:1))%4&&!keys[0]&&!keys[2]);
+        assert(volume_tab==volume_pages[(slot+(dir<0?4:1))%5]&&!keys[0]&&!keys[2]);
     }
     for(int dir=-1;dir<=1;dir+=2){
         reset();first.owns_keys=true;volume_step=0;volume_value=dir;
@@ -974,6 +975,8 @@ void app_time_service_poll(bool idle) { (void)idle; }
 
 void ui_avatar_invalidate(void) {}
 bool ui_avatar_quiesce(unsigned timeout){(void)timeout;return true;}
+void wallpaper_rotation_invalidate(void) {}
+void wallpaper_rotation_idle(void) {}
 bool book_cover_jobs_quiesce(unsigned timeout){(void)timeout;return true;}
 void book_lock_collage_invalidate(void) {}
 

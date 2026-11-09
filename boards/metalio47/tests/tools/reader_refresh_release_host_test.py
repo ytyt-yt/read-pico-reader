@@ -36,6 +36,8 @@ static struct{bool valid;}s_reader_panel_frame;
 static int s_online_fonts;
 static bool ui_online_fonts_present(int *fonts,app_ctx_t *ctx,app_redraw_t redraw){(void)fonts;(void)ctx;(void)redraw;assert(false);return false;}
 static bool s_reader_clock_pending,s_input_settle,s_shelf_feedback_pending,s_cover_batch_present_pending,s_shelf_page_pending;
+static bool s_reader_body_frame;
+static void book_comic_cache_pause(void){}
 static bool s_reader_image_refresh_pending,s_reader_cleanup,s_reader_turn_pending,s_water_turn_pending,s_clear_confirm,s_reader_fullscreen,s_reader_footer_pending,s_reader_text_frame;
 static bool s_reader_image_frame,s_reader_image_exit_pending,hide_images;
 static int64_t s_reader_footer_due_ms;
@@ -112,6 +114,8 @@ for name in ('reader_area','reader_fullscreen_progress_area','progress_rect'):
 unit+='static enum EpdDrawError reader_present_crop(void *hl,const EpdWaveform *wave,int mode,EpdRect area,bool full){return full?update_display_area_full_with(hl,wave,mode,area):update_display_area_diff_with(hl,wave,mode,area); }\n'
 unit+=function('reader_soft_present',root/'main/apps/app_book.c')+'\n'
 unit+=function('reader_image_present',root/'main/apps/app_book.c')+'\n'
+unit+='static bool reader_images_hidden(void){return app_settings_reader_hide_images();}\n'
+unit+=function('present_water_turn',root/'main/apps/app_book.c')+'\n'
 unit+=function('present',root/'main/apps/app_book.c')
 unit+=r'''
 static void reset(void){
@@ -120,7 +124,7 @@ static void reset(void){
  s_reader_image_frame=s_reader_image_exit_pending=false;
  s_reader_panel=READER_PANEL_NONE;s_mode=MODE_GL16;s_reader_fullscreen=true;
  s_reader_footer_pending=true;s_reader_cleanup=false;s_water_turn_pending=false;s_reader_turn_pending=true;
- s_toolbar=s_clear_confirm=s_reader_image_refresh_pending=s_reader_clock_pending=false;s_reader_text_frame=false;s_area=reader_area();
+ s_toolbar=s_clear_confirm=s_reader_image_refresh_pending=s_reader_clock_pending=false;s_reader_text_frame=s_reader_body_frame=false;s_area=reader_area();
 }
 int main(void){
  app_ctx_t ctx={0};

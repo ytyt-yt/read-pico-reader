@@ -22,6 +22,7 @@ typedef struct {int64_t now_ms;int leaf;bool consumed,user_activity;} app_ctx_t;
 typedef enum {APP_REDRAW_NONE,APP_REDRAW_AREA,APP_REDRAW_PAGE,APP_REDRAW_FULL} app_redraw_t;
 enum {READING,TOC,SHELF,READER_PANEL_NONE,READER_PANEL_TOOLS};
 #define BOOK_TOC_ROWS 7
+#define BOOK_STORE_PATH_MAX 288
 #define MODE_GL16 1
 #define E0470_TURN_RTL 1
 #define E0470_TURN_LTR -1
@@ -44,7 +45,7 @@ typedef struct {int image;unsigned image_width,image_height;} blk_t;
 static blk_t *s_blocks;
 static int s_px=48,s_reader_panel=READER_PANEL_NONE,s_reader_slider=-1,s_view=READING;
 #define s_toolbar (s_reader_panel!=READER_PANEL_NONE)
-static bool s_reader_fullscreen,s_clear_confirm,s_reader_text_frame,s_reader_turn_pending;
+static bool s_reader_fullscreen,s_clear_confirm,s_reader_text_frame,s_reader_body_frame,s_reader_turn_pending;
 static bool s_reader_image_frame,s_reader_image_exit_pending;
 static bool s_water_turn_pending,s_reader_cleanup,draw_locked,load_failed;
 static int s_water_turn_dir;
@@ -55,6 +56,9 @@ static int s_turn_direction;
 static char s_message[128];
 static unsigned layout_span=100,reflows,paints,saves,failed_reflows;
 static uint8_t full_pages;
+#define BOOK_KIND_CBZ 2
+static int source_kind,s_comic_direction;
+static int book_kind(void){return source_kind;}
 static const char *app_settings_book_background_path(void){return "";}
 static void copy_text(char *to,size_t cap,const char *from){snprintf(to,cap,"%s",from);}
 static void lock_draw(void){assert(!draw_locked);draw_locked=true;}
@@ -117,8 +121,18 @@ static void app_settings_set_book_indent_adjust(int8_t px){adjustment=px;}
 static void book_layout_set_first_line_indent(unsigned em){assert(draw_locked);layout_indent=em;}
 static void book_layout_set_first_line_indent_adjust(int px){assert(draw_locked);layout_adjustment=px;}
 """
+unit += r"""
+static bool s_requested_comic,s_comic_active;
+static int s_requested_comic_page;
+static size_t s_comic_index;
+static struct {size_t count;} s_comic_catalog;
+static bool book_comics_context(const char *path,void *directory){(void)path;(void)directory;return false;}
+static bool comic_open_chapter(app_ctx_t *ctx,size_t index,int position){(void)ctx;(void)index;(void)position;assert(false);return false;}
+static void book_comic_cache_pause(void){}
+static int app_comics_saved_page(const char *path){(void)path;return -1;}
+"""
 unit += function('apply_reader_indent', BOOK) + '\n'
-for name in ('reader_zoom_reset', 'app_book_request_open', 'app_book_request_open_from_home', 'app_book_request_resume',
+for name in ('reader_images_hidden', 'reader_zoom_reset', 'app_book_request_open', 'app_book_request_open_from_home', 'app_book_request_resume',
              'toggle_reader_fullscreen', 'apply_reader_option', 'reader_turn_chrome', 'turn_page'):
     unit += function(name, BOOK) + '\n'
 unit += r'''
@@ -137,7 +151,7 @@ static void reset(bool full,bool tools,size_t page,size_t chapter){
  immersive=persisted_immersive=false;style_saves=0;s_text="text";s_view=READING;s_reader_fullscreen=full;layout_span=100;s_page=page;s_chapter=chapter;
  s_reader_panel=tools?READER_PANEL_TOOLS:READER_PANEL_NONE;s_reader_slider=2;
  reflows=paints=saves=s_stats_pending_turns=s_session_turns=s_turns=s_unsaved=0;
- failed_reflows=0;load_failed=false;full_pages=0;s_reader_text_frame=true;
+ failed_reflows=0;load_failed=false;full_pages=0;s_reader_text_frame=s_reader_body_frame=true;
  s_reader_turn_pending=s_water_turn_pending=s_reader_cleanup=false;s_jump_offset=0;
 }
 int main(void){
@@ -182,9 +196,12 @@ int main(void){
  }
  reset(true,false,2,0);test_images=1;assert(turn_page(&ctx,1)==APP_REDRAW_AREA);
  test_images=0;effect=1;
- // Mixed/image targets and leaving an image never run the text ripple waveform.
- reset(true,false,2,0);test_images=2;assert(turn_page(&ctx,1)==APP_REDRAW_AREA&&!s_water_turn_pending&&!s_reader_turn_pending);
+ // 图文和插图退出保留灰阶水波纹；无已显示正文时不得误用翻页波形。
+ // Illustrated pages and image exits retain gray ripple; no turn waveform without a displayed body.
+ reset(true,false,2,0);test_images=2;assert(turn_page(&ctx,1)==APP_REDRAW_AREA&&s_water_turn_pending&&!s_reader_turn_pending);
  reset(true,false,2,0);test_images=0;s_reader_text_frame=false;
+ assert(turn_page(&ctx,1)==APP_REDRAW_AREA&&s_water_turn_pending&&!s_reader_turn_pending);
+ reset(true,false,2,0);s_reader_body_frame=s_reader_text_frame=false;
  assert(turn_page(&ctx,1)==APP_REDRAW_AREA&&!s_water_turn_pending&&!s_reader_turn_pending);
  test_images=0;
  // An image that was actually displayed keeps its exit-cleaning state only on an area turn.

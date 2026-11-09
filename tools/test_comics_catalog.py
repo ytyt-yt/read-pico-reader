@@ -5,6 +5,7 @@
 English: Exercise real two-level scans and prepared-cover loading/caches, including same-second same-size replacement.
 """
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import tempfile
@@ -70,8 +71,8 @@ static esp_err_t book_epub_cover_bounded(const char *p,uint8_t **out,size_t *siz
 static void decode_yield(unsigned at){(void)at;}
 static void *cover_alloc(size_t n){++rows_allocated;return oom?NULL:malloc(n);}
 typedef struct {uint16_t at;uint8_t frac;} scale_step_t;
-typedef struct {const uint8_t *data;size_t size,pos;FILE *file;} png_input_t;
 '''
+unit += re.search(r'typedef struct \{[^{}]*\} png_input_t;', source).group(0) + "\n"
 for name in ("luminance", "scale_axis", "scale_map", "scale_next", "bilinear4", "book_cover_crop",
              "png_read_mem", "png_gray_rows"):
     unit += function(name, COVER) + "\n"

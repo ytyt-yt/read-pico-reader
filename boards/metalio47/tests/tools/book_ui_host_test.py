@@ -55,6 +55,7 @@ typedef enum { UI_GESTURE_SWIPE_L, UI_GESTURE_SWIPE_R, UI_GESTURE_SWIPE_U, UI_GE
 #include "book_shelf_categories.h"
 #include "book_file_path.h"
 #define ESP_OK 0
+#define ESP_ERR_NO_MEM 0x101
 #define ESP_FAIL -1
 #define ESP_ERR_NVS_NOT_FOUND -2
 #define ESP_ERR_INVALID_STATE -3
@@ -227,6 +228,8 @@ static bool s_book_fonts_applied;
 static bool app_settings_book_fonts(void){return false;}
 static void book_set_embedded_fonts(bool enabled){(void)enabled;}
 #define BOOK_KIND_EPUB 1
+#define BOOK_KIND_CBZ 2
+static void book_comic_cache_pause(void){}
 static int book_kind(void){return 0;}
 static bool load_chapter(app_ctx_t *ctx,size_t chapter,size_t offset,bool last_page){
     (void)ctx;(void)chapter;(void)offset;(void)last_page;return true;
@@ -243,6 +246,9 @@ static void invalidate_prep(void){}
 static void pause_reader_prep(void){invalidate_prep();}
 static void reader_page_cache_clear(void){}
 static void invalidate_covers(void){}
+// 强制位置索引未命中，以执行此夹具的真实冷目录扫描。/ Force position-index misses to exercise this harness's real cold scan.
+static void shelf_cache_save(void){}
+static bool shelf_cache_load(app_ctx_t *ctx){(void)ctx;return false;}
 static shelf_entry_t s_managed;
 static bool s_delete_confirm,s_file_removed,s_clear_confirm;
 static char s_manage_message[128];
@@ -443,6 +449,21 @@ unit+='\n'.join(line for line in (source.parents[2]/'main/ui/ui_reader_layout.h'
 unit += function('app_settings_book_paragraph_value', settings_source) + '\n'
 unit += function('app_settings_book_paragraph_level', settings_source) + '\n'
 unit += function("book_layout_balanced_rect", layout_source) + "\n"
+unit += r"""
+static bool s_comic_active,s_requested_comic;
+static int s_comic_open_position,s_comic_return_page,s_requested_comic_page;
+static size_t s_comic_index;
+static char s_comic_directory[288];
+typedef struct {char path[288];} comic_test_entry_t;
+static struct {size_t count;bool incomplete;comic_test_entry_t *entries;} s_comic_catalog;
+static void book_comics_dispose(void *p){(void)p;}
+static bool book_comics_context(const char *p,char *d){(void)p;(void)d;return false;}
+static int book_comics_scan(const char *p,void *c){(void)p;(void)c;return 0;}
+static app_redraw_t comic_return(app_ctx_t *ctx,const char *msg){(void)ctx;(void)msg;assert(false);return APP_REDRAW_NONE;}
+static size_t reader_toc_count(void){return book_navigation_count();}
+"""
+for name in ('ui_shelf_rows','ui_shelf_row'):
+    unit += function(name, source.parents[1] / 'ui/ui_shelf.c') + '\n'
 unit += function("set_reader_view") + "\n"
 unit += function("ble_pt_action_for_usage", source.parents[2] / "components/ble_page_turner/src/ble_page_turner.c") + "\n"
 unit += r'''
@@ -452,7 +473,7 @@ static unsigned s_chapter_lead_row_height;
 static void apply_chapter_lead(const char *title,const char *label,size_t skip,unsigned row){(void)title;(void)label;(void)skip;(void)row;}
 static void refresh_chapter_lead(void){}
 '''
-for name in ("inline_ink_gray", "reader_margin_width", "reader_margin_levels", "reader_margin_level_for", "reader_margin_for_level", "slider_index", "reader_margin_input", "reader_area", "reader_fullscreen_progress_area", "body_rect_for_tracking", "body_rect", "progress_rect", "copy_text", "reader_footer_strip_number", "favorite_key", "favorite_read_handle", "shelf_hidden_key", "shelf_hidden_read_handle", "shelf_hidden_load", "shelf_hidden_save", "shelf_rows", "row_rect", "shelf_category_add", "shelf_category_init", "shelf_category_matches", "shelf_category_remember", "shelf_category_restore", "shelf_categories_recount", "shelf_matches", "compare_books", "sort_shelf", "shelf_reserve", "delete_retry_find", "delete_retry_reserve", "delete_retry_discard", "scan_shelf_dir", "shelf_backfill_visit", "shelf_backfill_read_books", "scan_shelf", "refresh_cached_progress",
+for name in ("reader_images_hidden", "inline_ink_gray", "reader_margin_width", "reader_margin_levels", "reader_margin_level_for", "reader_margin_for_level", "slider_index", "reader_margin_input", "reader_area", "reader_fullscreen_progress_area", "body_rect_for_tracking", "body_rect", "progress_rect", "copy_text", "reader_footer_strip_number", "favorite_key", "favorite_read_handle", "shelf_hidden_key", "shelf_hidden_read_handle", "shelf_hidden_load", "shelf_hidden_save", "shelf_rows", "row_rect", "shelf_category_add", "shelf_category_init", "shelf_category_matches", "shelf_category_remember", "shelf_category_restore", "shelf_categories_recount", "shelf_matches", "compare_books", "sort_shelf", "shelf_reserve", "delete_retry_find", "delete_retry_reserve", "delete_retry_discard", "scan_shelf_dir", "shelf_cbz_in_books", "shelf_backfill_visit", "shelf_backfill_read_books", "scan_shelf", "refresh_cached_progress",
              "pending_find", "pending_reserve", "pending_restore", "pending_discard", "pending_mark_latest", "pending_drop_invalidated", "pending_flush", "reader_page_offset", "save_progress", "retry_progress", "layout_name", "manage_panel", "manage_rect", "batch_rect", "manage_back_rect", "bulk_filter_rect", "bulk_nav_rect", "bulk_nav_hit", "bulk_sort_rect", "shelf_order_mode", "shelf_order_desc", "leaves", "selected_count", "clear_selection", "toggle_selection", "bookmark_compact", "search_begin", "refresh_search_matches", "search_finish", "refresh_capacity", "manage_apply", "manage_action", "batch_apply", "batch_action", "bulk_turn_page", "bulk_finish", "bulk_select_row", "bulk_action", "bulk_control_at", "menu_handle_enabled", "reader_manual_refresh", "apply_reader_option", "reader_return", "reader_key_action", "on_key", "on_key_long", "draw_wrapped_name", "open_requested_book", "on_enter", "book_on_exit"):
     unit += function(name) + "\n"
 for name in ("book_remote_direction", "shelf_turn_page", "shelf_page_arrow_rect", "reader_swipe_direction"):

@@ -220,8 +220,10 @@
   },
   "approved_overrides": {
     "boards/pico/src/main/sleep.c": {
-      "sha256": "7c6b16ce79b251024c4170f690e52fba23ff96b0b67a9710fc83b1bfe3c1a411",
-      "user_decision": "用户2026-11-04要求Pico四种锁屏样式一起优化且保留保护：正常锁屏/浅睡解锁单次GC16、页面恢复后重启网络，拼贴提示只局部GC16；反馈/绘图/输出失败保留原清屏，缓存/PIN/深睡策略及波形不变。 / User2026-11-04 extends the Pico optimization to all four lock styles: one GC16 lock/light-wake restore, deferred network restart and local GC16 collage feedback; retain clearing on feedback/art/output failure and preserve cache/PIN/deep-sleep/waveform behavior. 用户2026-11-04报告透明书封透字并要求修复：仅透明书封入锁增加一次原GC16白目标后输出最终图，不改原表、供电与解锁逻辑，分配/显示失败沿用清屏兜底。 / User2026-11-04 authorizes one calibrated white GC16 target before transparent-cover art to address ghosting, retaining raw tables, power, unlock logic and allocation/display-failure recovery. 用户确认透明书封不再透字后要求其他类型一并修复：将一次GC16白目标+最终图扩展到Pico四种锁屏，异常清屏与解锁保护保持。 / After device confirmation, the user requests the same white-target plus final-image sequence for all four Pico lock styles, retaining failure recovery and unlock protection."
+      "sha256": "2860def914a6b0bf1d800c8ee497115630ee8fa95f5fce4d6457531520f926b8",
+      "user_decision": "用户2026-11-04要求Pico四种锁屏样式一起优化且保留保护：正常锁屏/浅睡解锁单次GC16、页面恢复后重启网络，拼贴提示只局部GC16；反馈/绘图/输出失败保留原清屏，缓存/PIN/深睡策略及波形不变。 / User2026-11-04 extends the Pico optimization to all four lock styles: one GC16 lock/light-wake restore, deferred network restart and local GC16 collage feedback; retain clearing on feedback/art/output failure and preserve cache/PIN/deep-sleep/waveform behavior. 用户2026-11-04报告透明书封透字并要求修复：仅透明书封入锁增加一次原GC16白目标后输出最终图，不改原表、供电与解锁逻辑，分配/显示失败沿用清屏兜底。 / User2026-11-04 authorizes one calibrated white GC16 target before transparent-cover art to address ghosting, retaining raw tables, power, unlock logic and allocation/display-failure recovery. 用户确认透明书封不再透字后要求其他类型一并修复：将一次GC16白目标+最终图扩展到Pico四种锁屏，异常清屏与解锁保护保持。 / After device confirmation, the user requests the same white-target plus final-image sequence for all four Pico lock styles, retaining failure recovery and unlock protection.",
+      "source_commit": "570d626337a918191590f3d68eb75ed57abf42c4",
+      "reason": "随机壁纸锁屏先汇合可取消预热，成功推屏后提交图片；既有清屏、供电/PIN/恢复路径保持。 / Random wallpaper locks join cancellable warming and commit after presentation; retain clearing, power/PIN and restore paths."
     },
     "main/sleep.h": {
       "sha256": "0c067e19583e5ee75fd726f0bf773482b280346b795f88fd80ec2f175b99f4c5",
@@ -230,8 +232,9 @@
       "reason": "Retain the merged PR71 API; User2026-11-04 all-style Pico lock optimization updates only the local-GC16 collage-feedback contract comment. No declarations or S31 behavior changed."
     },
     "boards/metalio47/src/main/sleep.c": {
-      "sha256": "348ee84c094c76d5d2f67d5fb5f51d9d37f1376d5ba059765d7dd721e28dae2c",
-      "reason": "User2026-11-04 explicitly verifies full physical wake-target clearing without changing back history or refreshing; retain PR73 charger, keep-light, native power sequence and wake/PIN gates."
+      "sha256": "d3148307d37bdec425904045c6b72e3bd7addfef4c3f4ce430f35dcf272bae72",
+      "reason": "随机壁纸锁屏先汇合可取消预热，提交实际显示身份；保留原唤醒清白、供电与PIN。 / Random wallpapers join cancellable warming and commit displayed identity; retain wake clearing, power and PIN.",
+      "source_commit": "570d626337a918191590f3d68eb75ed57abf42c4"
     },
     "components/metalio_hw/CMakeLists.txt": {
       "sha256": "75f3504a8850c7275cbdd986d08947fe182661b1f308b3cf6480afb4f86ff36f",
@@ -244,10 +247,10 @@
       "reason": "User2026-11-03 authorized the CX25601N charger optimization; charger_init now delegates to metalio_charger while battery status decoding stays unchanged."
     },
     "boards/pico/src/main/display_reader_waveform.c": {
-      "sha256": "231de8d85f6b6d9d7575ec37f18021c1b9d058ecd584ddbb18cdbf5fb2f10d19",
-      "pull_request": 68,
-      "source_commit": "cd9f1a598a97a985bcda57dc47d49e118c4b1083",
-      "reason": "User2026-11-02 explicitly approved merging PR68 as authored; retain its Pico ripple erase/redrive phases and64-phase engine capacity."
+      "sha256": "784b170d1d67d4813a351dfde2984cf83e8b1806c8a3383598c963fefab003dc",
+      "source_commit": "fcfa9b0f9b5b842d139e4a24132235b99e8a8acd",
+      "reason": "同步main PR2独立清晰水波纹派生序列；原始表与原水波纹保持。 / Pin main PR2 separate derived Clear ripple; retain raw tables and original ripple.",
+      "source_pull_request": "https://github.com/ytyt-yt/read-pico-reader/pull/2"
     },
     "boards/metalio47/src/main/display_reader_waveform.c": {
       "sha256": "e256413af08373f8cd394fd09ef352880dc60966b658d3ba05201cefbe6b08cf",
@@ -277,18 +280,20 @@
       "reason": "User2026-11-02: S31 wake/font and keep-light policy, bounded Wi-Fi reception and read-only SD profile diagnostics; preserve native pins, power sequence, waveforms and SD fallback."
     },
     "boards/pico/src/components/e0470_page_turn/e0470_page_turn.c": {
-      "sha256": "fcc91f574f59abcceab2f879f3d8992eb306c251a0933a974438e579ba39c114",
-      "pull_request": 68,
-      "source_commit": "cd9f1a598a97a985bcda57dc47d49e118c4b1083",
-      "reason": "User2026-11-02 explicitly approved merging PR68 as authored; retain its Pico ripple erase/redrive phases and64-phase engine capacity."
+      "sha256": "e43d8d513ab3518d38eae3fb430189d3be83416f95b43d1a5cef960ef3e9b53f",
+      "source_commit": "fcfa9b0f9b5b842d139e4a24132235b99e8a8acd",
+      "reason": "同步main PR2清晰水波纹的65相容量，原水波纹和原始表保持。 / Pin merged main PR2 capacity for65-phase Clear ripple; original ripple and raw tables remain unchanged.",
+      "source_pull_request": "https://github.com/ytyt-yt/read-pico-reader/pull/2"
     },
     "CMakeLists.txt": {
       "sha256": "a9b7d22f5ab7bc3117f86b54335bd8b7559a1370517691c2c3a66b8762ea0b08",
       "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases)."
     },
     "boards/metalio47/src/main/display.c": {
-      "sha256": "f27d4f559cb3ede0115dfa84f11c8a907b64ca68831dbe740b781ebba637f050",
-      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases)."
+      "sha256": "c13dbebfde748f958ba030a7271c15b6de744b8e84c8bf4ba65dae27e716a24d",
+      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases).",
+      "source_commit": "76c030675067ac55b5a779c3e767395dab13ecc5",
+      "reason": "同步main已合入的S31最大力度屏幕修复（多轮既有清屏和完整GC16），原始表/供电不变。 / Pin the merged maximum-strength S31 panel repair using existing clears/full GC16; raw tables and power remain unchanged."
     },
     "components/read_pico_pmu/README.md": {
       "sha256": "17e5f056acaf1d4102fef058c367afe7d4c1b159ee39aba779be0e86af03116d",
@@ -309,8 +314,10 @@
       "source_commit": "ba3d09e0ba95d06d04149465964428be3c81e998"
     },
     "main/display_reader_waveform.h": {
-      "sha256": "5d11da8c89d685551d9b93043af3be307c2a538228aa1b1f6c7b213a196b6f84",
-      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases)."
+      "sha256": "f3a40bd872316080db28a3f185e785115f5e33d9aeb96f3317b6b83f934a60f4",
+      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases).",
+      "source_commit": "fcfa9b0f9b5b842d139e4a24132235b99e8a8acd",
+      "reason": "同步main PR2独立清晰水波纹声明及原模式说明，S31接口保持。 / Pin main PR2 separate Clear ripple declarations and original-mode documentation; retain S31 APIs."
     },
     "components/epdiy/src/highlevel.c": {
       "sha256": "92c50435e721b7fb1cefb4566ac193409babe21f7a7542283fb1596e84ae42a1",
@@ -323,6 +330,16 @@
     "boards/metalio47/src/components/epdiy/src/output_lcd/lcd_driver.c": {
       "sha256": "c4e9ac447b6e9db85647d10ec63a4d4f5ada444f3fa9ad3b9602b9d1dee3da10",
       "reason": "User2026-11-04 adopts S31 data-only zero-prefix DMA and CKV-high frame start from vendor2.0.74; retain clocks, pipeline, interrupts, power and Moku waveforms."
+    },
+    "boards/pico/src/main/display.c": {
+      "sha256": "ab0a2410f8626e2979f04d0107b4666e2795a86e4653faf9b5eef094d8ca1bca",
+      "source_commit": "fcfa9b0f9b5b842d139e4a24132235b99e8a8acd",
+      "reason": "同步main已合入的图片水波纹及PR2独立清晰文字档/FULL扫描，原模式、供电与释放路径保持。 / Pin merged image ripple and PR2 separate Clear text/FULL scan, retaining existing modes, power and release paths."
+    },
+    "main/display.h": {
+      "sha256": "f33c2cc8bd0282c5e6c755921de4a9eb71611b3629c75e194fb93cd70a465a94",
+      "source_commit": "93ff710fb9cae733ab1f2bd072a89bf93edbd738",
+      "reason": "同步main PR1已合入的图片水波纹声明，不改变硬件行为。 / Pin the image-ripple declaration already merged by main PR1; no hardware behavior change."
     }
   }
 }

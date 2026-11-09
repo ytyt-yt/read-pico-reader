@@ -145,7 +145,7 @@ jobs:
         shell: bash
         run: |
           apt-get update -qq
-          apt-get install -y --no-install-recommends zlib1g-dev libpng-dev libwebp-dev python3-pil
+          apt-get install -y --no-install-recommends zlib1g-dev libpng-dev libwebp-dev python3-pil pkg-config
           /usr/bin/python3 tools/test_image_files.py --jpeg-component build/boards/pico/source/managed_components/espressif__esp_jpeg
           /usr/bin/python3 tools/test_image_files.py --jpeg-component build/boards/pico/source/managed_components/espressif__esp_jpeg \
             --lowzag-component build/boards/pico/source/managed_components/defensiblelogic__lowzag
