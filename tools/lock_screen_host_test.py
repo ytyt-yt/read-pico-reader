@@ -53,6 +53,8 @@ static uint8_t selected_style;
 static const char *wallpaper="";
 uint8_t app_settings_lock_style(void){return selected_style;}
 const char *app_settings_wallpaper_path(void){return wallpaper;}
+static const char *random_wallpaper;
+const char *wallpaper_rotation_path(void){return random_wallpaper?random_wallpaper:wallpaper;}
 const char *app_settings_bookmark_path(void){return wallpaper;}
 
 static bool fat_semantics;static int rename_calls,rename_fail_at;
@@ -166,6 +168,13 @@ int main(void){
  assert(!lock_screen_restore(f));lock_screen_save(framebuffer);assert(lock_screen_restore(f));
  image=fopen(wallpaper,"ab");assert(image);assert(fputc(1,image)!=EOF&&fclose(image)==0);assert(!lock_screen_restore(f));
  assert(remove(wallpaper)==0);lock_screen_save(framebuffer);assert(lock_screen_restore(f));
+ selected_style=1;const char *fixed_preference=wallpaper;
+ random_wallpaper=LOCK_SCREEN_CACHE_PARENT "/random-a.jpg";
+ assert(lock_screen_save(framebuffer)&&lock_screen_restore(f));
+ random_wallpaper=LOCK_SCREEN_CACHE_PARENT "/random-b.jpg";
+ assert(!lock_screen_restore(f)&&wallpaper==fixed_preference);
+ assert(lock_screen_save(framebuffer)&&lock_screen_restore(f));random_wallpaper=NULL;
+ assert(!lock_screen_restore(f));
  assert(!lock_screen_restore(NULL));
  // 新兜底规则不能继续复用旧版完整缓存；当前有效缓存仍直接恢复。
  // Reject a complete old-policy cache while retaining valid current-generation art.

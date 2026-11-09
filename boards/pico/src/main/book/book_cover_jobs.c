@@ -7,7 +7,9 @@
 #include "book_title.h"
 #include "ui_image_dither.h"
 #include "read_pico_sd.h"
+#include "ui_wallpaper.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include "esp_heap_caps.h"
@@ -21,6 +23,15 @@ static cover_job_slot_t *s_jobs;
 static portMUX_TYPE s_lock=portMUX_INITIALIZER_UNLOCKED;
 static unsigned s_generation;
 static bool s_running,s_paused;
+static char s_wallpaper[288];
+static unsigned s_wallpaper_generation;
+static bool wallpaper_job_current(void) {
+    portENTER_CRITICAL(&s_lock);
+    bool active=!s_paused && s_wallpaper_generation==s_generation;
+    portEXIT_CRITICAL(&s_lock);
+    return active && read_pico_sd_io_ready();
+}
+
 static uint8_t contrast_gray(uint8_t value,unsigned contrast) {
     int v=128+((int)value-128)*(int)contrast/100;
     return (uint8_t)(v<0?0:v>255?255:v)&0xf0;
@@ -98,6 +109,13 @@ static void worker(void *unused) {
         cover_job_slot_t job={0};int slot=-1;unsigned generation;
         portENTER_CRITICAL(&s_lock);
         if(!s_paused&&s_jobs)for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)if(s_jobs[i].state==QUEUED||s_jobs[i].state==CHECK_QUEUED){slot=(int)i;break;}
+        if(slot<0 && !s_paused && s_wallpaper[0]) {
+            char path[288];memcpy(path,s_wallpaper,sizeof(path));s_wallpaper[0]=0;
+            s_wallpaper_generation=s_generation;
+            portEXIT_CRITICAL(&s_lock);
+            ui_wallpaper_warm_cache(path,wallpaper_job_current);
+            vTaskDelay(1);continue;
+        }
         if(slot<0){s_running=false;portEXIT_CRITICAL(&s_lock);break;}
         job=s_jobs[slot];s_jobs[slot].automatic=NULL;s_jobs[slot].state=RUNNING;generation=s_generation;
         portEXIT_CRITICAL(&s_lock);
@@ -116,13 +134,13 @@ static void worker(void *unused) {
     vTaskDelete(NULL);
 }
 static void start_worker(void) {
-    portENTER_CRITICAL(&s_lock);bool queued=false;
+    portENTER_CRITICAL(&s_lock);bool queued=s_wallpaper[0]!=0;
     if(s_jobs)for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)queued|=s_jobs[i].state==QUEUED||s_jobs[i].state==CHECK_QUEUED;
     bool start=queued&&!s_running&&!s_paused;if(start)s_running=true;portEXIT_CRITICAL(&s_lock);
     if(start&&xTaskCreate(worker,"covers",12288,NULL,1,NULL)!=pdPASS){
         uint8_t *old[BOOK_COVER_JOB_SLOTS]={0};
-        portENTER_CRITICAL(&s_lock);s_running=false;
-        for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)if(s_jobs[i].state==QUEUED||s_jobs[i].state==CHECK_QUEUED){
+        portENTER_CRITICAL(&s_lock);s_running=false;s_wallpaper[0]=0;
+        if(s_jobs)for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i)if(s_jobs[i].state==QUEUED||s_jobs[i].state==CHECK_QUEUED){
             old[i]=s_jobs[i].automatic;s_jobs[i].automatic=NULL;
             s_jobs[i].state=s_jobs[i].state==CHECK_QUEUED?CHECK_FAILED:FAILED;
         }
@@ -196,7 +214,7 @@ void book_cover_jobs_cancel(unsigned generation) {
     uint8_t *old[BOOK_COVER_JOB_SLOTS*2]={0};
     portENTER_CRITICAL(&s_lock);
     if(generation==s_generation){
-        ++s_generation;s_paused=true;
+        ++s_generation;s_paused=true;s_wallpaper[0]=0;
         if(s_jobs)for(unsigned i=0;i<BOOK_COVER_JOB_SLOTS;++i){
             old[i*2]=s_jobs[i].result.pixels;old[i*2+1]=s_jobs[i].automatic;
             memset(&s_jobs[i],0,sizeof(s_jobs[i]));
@@ -212,4 +230,14 @@ bool book_cover_jobs_quiesce(unsigned timeout_ms) {
         if(!active)return true;
         if(esp_timer_get_time()>=deadline)return false;
         vTaskDelay(pdMS_TO_TICKS(10));}
+}
+
+bool book_cover_jobs_prefetch_wallpaper(const char *path) {
+    if (!path || strncmp(path,"/sdcard/pictures/wallpapers/",sizeof("/sdcard/pictures/wallpapers/")-1) || strlen(path)>=sizeof(s_wallpaper) || !read_pico_sd_io_ready()) return false;
+    portENTER_CRITICAL(&s_lock);
+    bool ok=!s_running && !s_wallpaper[0];
+    if (ok) { snprintf(s_wallpaper,sizeof(s_wallpaper),"%s",path);s_paused=false; }
+    portEXIT_CRITICAL(&s_lock);
+    if (ok) start_worker();
+    return ok;
 }

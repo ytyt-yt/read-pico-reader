@@ -32,15 +32,21 @@ static const char *TAG="s31_jpeg";
 static atomic_uint jpeg_cancel_generation;
 static _Thread_local bool jpeg_last_cancelled, jpeg_progressive_claimed;
 static _Thread_local unsigned jpeg_operation_generation;
+static bool jpeg_active(bool (*active)(void)) {
+    jpeg_last_cancelled |= jpeg_operation_generation != atomic_load(&jpeg_cancel_generation) ||
+        (active && !active());
+    return !jpeg_last_cancelled;
+}
 
 // 强缩小时用面积平均保留细线；放大保留双线性，不加锐化或改灰阶。
 // Area averaging retains fine lines on reduction; enlargement remains bilinear with no sharpening/quantization.
 static bool jpeg_scale(const uint8_t *src,unsigned sw,unsigned sh,unsigned stride,
-                       unsigned dw,unsigned dh,uint8_t *out) {
+                       unsigned dw,unsigned dh,uint8_t *out,bool (*active)(void)) {
     if(!src||!out||!sw||!sh||sw>8192||sh>8192||stride<sw||!dw||!dh||dw>1216||dh>1216)return false;
     book_crop_t c=book_cover_crop(sw,sh,dw,dh);
     if(!c.width||!c.height||c.x+c.width>sw||c.y+c.height>sh)return false;
     for(unsigned y=0;y<dh;++y) {
+        if(!jpeg_active(active))return false;
         if(c.width>=dw && c.height>=dh) {
             unsigned top=(uint64_t)y*c.height*256/dh,bottom=(uint64_t)(y+1)*c.height*256/dh;
             for(unsigned x=0;x<dw;++x) {
@@ -106,12 +112,13 @@ typedef struct {
     uint8_t *gray, *scan_rows;
     uint64_t *sums;
     jpeg_band_t bands[3];
-    unsigned band_count, generation;
+    unsigned band_count;
     size_t work_bytes;
     void (*realize)(j_common_ptr);
     boolean (*fill_input)(j_decompress_ptr);
     void (*skip_input)(j_decompress_ptr,long);
     int64_t start, yield_at;
+    bool (*active)(void);
 } jpeg_soft_t;
 static void jpeg_soft_error(j_common_ptr p) {
 #ifdef METALIO_JPEG_HOST_DEBUG
@@ -120,7 +127,7 @@ static void jpeg_soft_error(j_common_ptr p) {
     longjmp(((jpeg_soft_t *)p->client_data)->escape,1);
 }
 static void jpeg_soft_check(jpeg_soft_t *s) {
-    jpeg_last_cancelled = s->generation != atomic_load(&jpeg_cancel_generation);
+    (void)jpeg_active(s->active);
     if (jpeg_last_cancelled || esp_timer_get_time()-s->start > JPEG_SOFT_DEADLINE_US)
         ERREXIT(&s->jpeg, JERR_BAD_STATE);
     if (esp_timer_get_time()-s->yield_at >= 20000) { s->yield_at=esp_timer_get_time(); vTaskDelay(1); }
@@ -289,10 +296,11 @@ static void jpeg_soft_scale(jpeg_soft_t *s,unsigned dw,unsigned dh) {
     }
     if(s->jpeg.output_scanline<sh) (void)jpeg_soft_row(s,sh-1);
 }
-static bool jpeg_progressive(const uint8_t *data,size_t size,FILE *file,unsigned dw,unsigned dh,uint8_t *out) {
+static bool jpeg_progressive(const uint8_t *data,size_t size,FILE *file,unsigned dw,unsigned dh,uint8_t *out,
+                              bool (*active)(void)) {
     jpeg_soft_t *s=calloc(1,sizeof(*s));if(!s)return false;
     volatile bool ok=false;
-    s->generation=jpeg_operation_generation;
+    s->active=active;
     s->start=esp_timer_get_time();s->yield_at=s->start;
     s->jpeg.err=jpeg_std_error(&s->error);s->error.error_exit=jpeg_soft_error;s->error.output_message=jpeg_soft_quiet;
     s->jpeg.client_data=s;
@@ -397,7 +405,8 @@ static bool jpeg_hw_file_shape(FILE *file,size_t size,unsigned *w,unsigned *h,un
     }
     return false;
 }
-static bool jpeg_hardware(const uint8_t *data,size_t size,FILE *file,unsigned dw,unsigned dh,uint8_t *out) {
+static bool jpeg_hardware(const uint8_t *data,size_t size,FILE *file,unsigned dw,unsigned dh,uint8_t *out,
+                          bool (*active)(void)) {
     unsigned w=0,h=0,pw=0,ph=0;bool gray=false;
     if(file){bool shape=jpeg_hw_file_shape(file,size,&w,&h,&pw,&ph,&gray);
         if(fseek(file,0,SEEK_SET)||!shape)return false;
@@ -410,7 +419,14 @@ static bool jpeg_hardware(const uint8_t *data,size_t size,FILE *file,unsigned dw
     uint8_t *input=NULL,*pixels=NULL;bool ok=false;jpeg_decoder_handle_t engine=NULL;
     jpeg_decode_memory_alloc_cfg_t mem={.buffer_direction=JPEG_DEC_ALLOC_INPUT_BUFFER};
     input=jpeg_alloc_decoder_mem(size,&mem,&input_bytes);if(!input)goto done;
-    if(file){if(fread(input,1,size,file)!=size)goto done;}else memcpy(input,data,size);
+    if(file){
+        for(size_t at=0;at<size;){
+            size_t chunk=size-at<16384?size-at:16384;
+            if(!jpeg_active(active)||fread(input+at,1,chunk,file)!=chunk)goto done;
+            at+=chunk;
+        }
+    }else memcpy(input,data,size);
+    if(!jpeg_active(active))goto done;
     mem.buffer_direction=JPEG_DEC_ALLOC_OUTPUT_BUFFER;
     pixels=jpeg_alloc_decoder_mem(bytes,&mem,&output_bytes);if(!pixels)goto done;
     jpeg_decode_engine_cfg_t config={.timeout_ms=200};
@@ -420,34 +436,43 @@ static bool jpeg_hardware(const uint8_t *data,size_t size,FILE *file,unsigned dw
     uint32_t used=0;int64_t start=esp_timer_get_time();
     if(jpeg_decoder_process(engine,&cfg,input,size,pixels,output_bytes,&used)!=ESP_OK||used<bytes)goto done;
     if(!gray) {
-        for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x) {
-            const uint8_t *rgb=pixels+((size_t)y*pw+x)*3;
-            // RGB888的实际字节顺序由rgb_order显式指定并由宿主/实机对照验证。
-            // Explicit rgb_order controls RGB888 byte order, covered by host/device comparisons.
-            pixels[(size_t)y*w+x]=(77u*rgb[0]+150u*rgb[1]+29u*rgb[2]+128u)>>8;
+        for(unsigned y=0;y<h;++y) {
+            if(!jpeg_active(active))goto done;
+            for(unsigned x=0;x<w;++x) {
+                const uint8_t *rgb=pixels+((size_t)y*pw+x)*3;
+                // RGB888的实际字节顺序由rgb_order显式指定并由宿主/实机对照验证。
+                // Explicit rgb_order controls RGB888 byte order, covered by host/device comparisons.
+                pixels[(size_t)y*w+x]=(77u*rgb[0]+150u*rgb[1]+29u*rgb[2]+128u)>>8;
+            }
         }
     }
-    ok=jpeg_scale(pixels,w,h,gray?pw:w,dw,dh,out);
+    ok=jpeg_scale(pixels,w,h,gray?pw:w,dw,dh,out,active);
     if(ok)ESP_LOGI(TAG,"hardware %ux%u padded=%ux%u ms=%lld",w,h,pw,ph,(long long)((esp_timer_get_time()-start)/1000));
 done:
     if(engine)jpeg_del_decoder_engine(engine);
     free(input);free(pixels);return ok;
 }
 
-bool metalio_jpeg_gray(const uint8_t *data,size_t size,FILE *file,unsigned width,unsigned height,uint8_t *out) {
+bool metalio_jpeg_gray_active(const uint8_t *data,size_t size,FILE *file,unsigned width,unsigned height,uint8_t *out,
+                              bool (*active)(void)) {
     jpeg_last_cancelled=false; jpeg_progressive_claimed=false;
     jpeg_operation_generation=atomic_load(&jpeg_cancel_generation);
     if((!data&&!file)||(data&&file)||!size||!out||!width||!height||width>1216||height>1216)return false;
     static atomic_flag owner=ATOMIC_FLAG_INIT;
     if(atomic_flag_test_and_set(&owner))return false;
-    bool ok=jpeg_hardware(data,size,file,width,height,out);
-    if(jpeg_operation_generation!=atomic_load(&jpeg_cancel_generation)) { jpeg_last_cancelled=true; ok=false; goto done; }
+    bool ok=false;
+    if(!jpeg_active(active))goto done;
+    ok=jpeg_hardware(data,size,file,width,height,out,active);
+    if(!jpeg_active(active)) { ok=false; goto done; }
     if(!ok) {
         if(file&&(fseek(file,0,SEEK_SET)||ferror(file)))goto done;
-        ok=jpeg_progressive(data,size,file,width,height,out);
+        ok=jpeg_progressive(data,size,file,width,height,out,active);
     }
     if(!ok)ESP_LOGD(TAG,"software fallback input=%u",(unsigned)size);
 done:
     atomic_flag_clear(&owner);
     return ok;
+}
+bool metalio_jpeg_gray(const uint8_t *data,size_t size,FILE *file,unsigned width,unsigned height,uint8_t *out) {
+    return metalio_jpeg_gray_active(data,size,file,width,height,out,NULL);
 }

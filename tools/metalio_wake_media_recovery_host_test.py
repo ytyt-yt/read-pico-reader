@@ -60,6 +60,8 @@ static bool ttf_font_ready(void){return true;}
 static bool ttf_font_is_builtin(void){return builtin;}
 static void ui_text_set_system_font(bool on){assert(!on);}
 static void ui_avatar_invalidate(void){}
+static unsigned wallpaper_invalidates;
+static void wallpaper_rotation_invalidate(void){++wallpaper_invalidates;}
 static void book_lock_collage_invalidate(void){}
 static bool read_pico_sd_needs_recovery(void){return !mounted&&!mounting;}
 static int read_pico_sd_invalidate_io(void){assert(!font_live&&!book_live);++invalidates;if(invalidate_busy)return ESP_ERR_NOT_FINISHED;mounted=false;verified=false;return ESP_OK;}
@@ -89,6 +91,7 @@ static void reset(void){
  font_live=book_live=builtin=abnormal=invalidated=false;font_error=book_error=transfer=0;
  fonts=books=health=mounts=closes=invalidates=lost=ready=recovered=0;generation=1;font_generation=0;
  s_media_recovery_after_ms=0;s_media_recovery_attempts=0;
+ wallpaper_invalidates=0;
 }
 int main(void){
  // Even a long in-progress mount performs no font/book opens. It is not cancelled as a fault.
@@ -109,7 +112,7 @@ int main(void){
  invalidate_busy=false;assert(!poll(8000)&&closes==3&&!s_lock_io_pending&&!mounted);
  assert(!poll(9000)&&mounting&&mounts==1&&fonts==3);
  assert(!poll(10000)&&mounting&&fonts==3);
- finish_mount();font_error=0;assert(poll(11000)&&ready==1&&recovered==1&&font_live&&font_generation==2);
+ finish_mount();font_error=0;assert(poll(11000)&&ready==1&&recovered==1&&font_live&&font_generation==2&&wallpaper_invalidates==1);
  // The recovery callback remains subject to abnormal-boot builtin protection.
  reset();s_lock_io_pending=false;mounted=verified=ui_mounted=false;abnormal=builtin=true;
  assert(!poll(12000)&&mounting);finish_mount();assert(!poll(13000)&&recovered==1&&builtin&&!font_live);

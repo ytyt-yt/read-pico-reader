@@ -29,6 +29,8 @@ unit = r'''
 typedef struct {unsigned x,y,width,height;} book_crop_t;
 typedef struct {uint16_t at;uint8_t frac;} scale_step_t;
 static size_t budget=8u*1024u*1024u,allocations,fail_at;
+static unsigned polls,stop_at;
+static bool active(void){return ++polls<stop_at;}
 static size_t heap_caps_get_free_size(unsigned caps){assert(caps==3);return budget;}
 static void *heap_caps_malloc(size_t n,unsigned caps){assert(caps==3);if(++allocations==fail_at)return NULL;return malloc(n);}
 static void heap_caps_free(void *p){free(p);}
@@ -46,13 +48,17 @@ int main(int argc,char **argv){
  const unsigned shapes[][2]={{48,32},{12,8},{96,64},{12,64},{64,12},{1,1}};
  for(unsigned i=0;i<sizeof(shapes)/sizeof(shapes[0]);++i){
   unsigned w=shapes[i][0],h=shapes[i][1];uint8_t *out=malloc((size_t)w*h);assert(out);
-  memset(out,0x91,(size_t)w*h);assert(lowzag_gray(data,size,w,h,out));
+  memset(out,0x91,(size_t)w*h);assert(lowzag_gray(data,size,w,h,out,NULL));
   if(w>1&&h>1){unsigned low=255,high=0;for(unsigned p=0;p<w*h;++p){if(out[p]<low)low=out[p];if(out[p]>high)high=out[p];}assert(high-low>80);assert(out[0]<out[w*h-1]);}
   free(out);
  }
- uint8_t out[64];assert(!lowzag_gray(data,size/3,8,8,out));
- budget=64u*1024u;assert(!lowzag_gray(data,size,8,8,out));budget=8u*1024u*1024u;
- for(unsigned n=1;n<=6;++n){fail_at=allocations+n;assert(!lowzag_gray(data,size,8,8,out));fail_at=0;}
+ uint8_t out[64];assert(!lowzag_gray(data,size/3,8,8,out,NULL));
+ polls=0;stop_at=UINT32_MAX;assert(lowzag_gray(data,size,8,8,out,active));
+ unsigned total=polls;assert(total>4);polls=0;stop_at=total/2;
+ assert(!lowzag_gray(data,size,8,8,out,active)&&polls==stop_at);
+ assert(lowzag_gray(data,size,8,8,out,NULL));
+ budget=64u*1024u;assert(!lowzag_gray(data,size,8,8,out,NULL));budget=8u*1024u*1024u;
+ for(unsigned n=1;n<=6;++n){fail_at=allocations+n;assert(!lowzag_gray(data,size,8,8,out,NULL));fail_at=0;}
  free(data);puts("PASS: actual progressive JPEG streaming, crop/scale/upscale, one-pixel target, corruption, low-memory and allocation-failure cleanup");
 }
 '''

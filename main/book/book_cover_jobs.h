@@ -35,3 +35,6 @@ int book_cover_jobs_recheck(unsigned generation,unsigned slot,uint64_t *fingerpr
 void book_cover_jobs_cancel(unsigned generation);
 /// 仅卸载/睡眠前收齐文件句柄，导航不等待。/ Join handles only before unmount/sleep; navigation never waits.
 bool book_cover_jobs_quiesce(unsigned timeout_ms);
+
+/// 低优先级单槽壁纸预热；与封面一起取消/汇合，忙时由空闲循环重试。/ One low-priority wallpaper slot, cancelled/joined with covers; idle retries while busy.
+bool book_cover_jobs_prefetch_wallpaper(const char *path);

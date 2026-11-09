@@ -88,6 +88,7 @@
 #include "sleep.h"
 #include "time_service.h"
 #include "ui_avatar.h"
+#include "wallpaper_rotation.h"
 #include "book/book_cover_jobs.h"
 #include "book/book_lock_collage.h"
 #include "ttf_font.h"
@@ -916,7 +917,7 @@ static bool poll_media(app_ctx_t* ctx, const app_desc_t* current,
     *mounted = ready;
     if (ready) *invalidated = false;
     if (ready) { s_media_recovery_attempts = 0; s_media_recovery_after_ms = 0; }
-    if (gained || lost) { ui_avatar_invalidate(); (void)book_cover_jobs_quiesce(0); book_lock_collage_invalidate(); }
+    if (gained || lost) { wallpaper_rotation_invalidate(); ui_avatar_invalidate(); (void)book_cover_jobs_quiesce(0); book_lock_collage_invalidate(); }
     if (gained && current->on_media_ready) current->on_media_ready(ctx);
 #if KIIKO_BOARD_METALIO47
     bool font_restored=gained && app_font_recover_media();
@@ -1722,6 +1723,14 @@ void app_loop_run(const app_loop_config_t* config) {
             present_page(&ctx, current, &gesture, redraw);
         }
         if (ctx.user_activity) { last_input_ms = ctx.now_ms; ctx.user_activity = false; }
+        static int64_t wallpaper_idle_at;
+        if (!power_dialog_open && !s_quick.open && !ai_overlay_open() && !menu_open &&
+            !touch.touched && !usb_storage_active() && !pico_online_busy() && !app_download_active() &&
+            current != &app_transfer && !current->holds_pmu && !ctx.request_app && !ctx.request_return &&
+            ctx.now_ms - last_input_ms >= 1500 && ctx.now_ms - wallpaper_idle_at >= 1000) {
+            wallpaper_idle_at = ctx.now_ms;
+            wallpaper_rotation_idle();
+        }
         // 充电插拔不属于用户输入，不打断锁屏/触摸或覆盖层，只更新已显示的状态栏。
         // Cable changes are not user input; update the drawn header alone without disturbing locks/touch/overlays.
         if (!power_dialog_open && !s_quick.open && !quick_input_owned && !menu_open &&

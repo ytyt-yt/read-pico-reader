@@ -133,6 +133,7 @@ static void transfer_file_moved(const char *old_path, const char *new_path, uint
 
 static bool transfer_set_wallpaper(const char *path) {
     if (strncmp(path, "/sdcard/pictures/", 17)) return false;
+    if (app_settings_set_wallpaper_random(false) != ESP_OK) return false;
     app_settings_set_wallpaper_path(path);
     if (strcmp(app_settings_wallpaper_path(), path)) return false;
     app_settings_set_lock_style(1);

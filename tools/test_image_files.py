@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Real streaming JPEG/PNG tests. Requires Pillow and libpng (pkg-config or --png-prefix)."""
+"""Real streaming JPEG/PNG tests. Requires Pillow, libwebp and libpng (pkg-config or --png-prefix)."""
 import argparse
 from pathlib import Path
 import random
@@ -15,7 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     args = argparse.ArgumentParser()
     args.add_argument("--png-prefix", type=Path)
+    args.add_argument("--lowzag-component", type=Path)
+    args.add_argument("--jpeg-component", type=Path, default=ROOT / "managed_components/espressif__esp_jpeg")
     options = args.parse_args()
+    jpeg = options.jpeg_component.resolve()
     if options.png_prefix:
         png_cflags = ["-I" + str(options.png_prefix / "include/libpng16")]
         png_link = ["-L" + str(options.png_prefix / "lib"), "-lpng16", "-lz",
@@ -29,13 +32,21 @@ def main():
             "#define CONFIG_JD_SZBUF 512", "#define CONFIG_JD_FORMAT 0", "#define CONFIG_JD_USE_SCALE 1",
             "#define CONFIG_JD_TBLCLIP 1", "#define CONFIG_JD_FASTDECODE 0"]) + "\n")
         includes = ["tools/book_epub_stubs", "main/book", "components/jpegdec/src",
-                    "managed_components/espressif__esp_jpeg/tjpgd", "managed_components/espressif__esp_jpeg/include"]
+                    "components/read_pico_webp/include", "components/read_pico_webp/libwebp"]
         flags = ["-g", "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                  "-ffunction-sections", "-fdata-sections"]
+        if sys.platform.startswith("linux"):
+            flags += ["-D__LINUX__"]
         flags += ["-I" + str(ROOT / path) for path in includes] + ["-I" + str(work)] + png_cflags
+        flags += ["-I" + str(jpeg / "tjpgd"), "-I" + str(jpeg / "include")]
         sources = ["tools/book_image_file_host_test.c", "main/book/book_cover.c", "main/book/book_image_header.c",
-                   "managed_components/espressif__esp_jpeg/tjpgd/tjpgd.c",
+                   "components/read_pico_webp/src/read_pico_webp.c",
+                   str(jpeg / "tjpgd/tjpgd.c"),
                    "components/jpegdec/src/JPEGDEC.cpp", "components/jpegdec/src/jpegdec_shim.cpp"]
+        if options.lowzag_component:
+            component = options.lowzag_component.resolve()
+            flags += ["-DKIIKO_LOWZAG_HOST_TEST", "-I" + str(component / "include")]
+            sources += [str(component / "src/lowzag.c")]
         objects = []
         for index, source in enumerate(sources):
             obj = work / f"part{index}.o"
@@ -48,14 +59,16 @@ def main():
             objects.append(str(obj))
         gc = "-Wl,-dead_strip" if sys.platform == "darwin" else "-Wl,--gc-sections"
         exe = work / "test"
-        subprocess.run(["c++", *flags, gc, *objects, *png_link, "-o", str(exe)], check=True)
+        webp_link = shlex.split(subprocess.check_output(["pkg-config", "--libs", "libwebp"], text=True))
+        subprocess.run(["c++", *flags, gc, *objects, *png_link, *webp_link, "-lm", "-o", str(exe)], check=True)
         image = Image.frombytes("RGB", (1536, 1536), random.Random(82).randbytes(1536 * 1536 * 3))
         image.save(work / "large.jpg", quality=100, subsampling=0)
         image.save(work / "large.png")
         image.save(work / "progressive.jpg", quality=95, progressive=True)
         Image.new("RGB", (829, 731), (160, 160, 160)).save(work / "odd.jpg")
         Image.new("RGB", (53, 41), (160, 160, 160)).save(work / "small.jpg", progressive=True)
-        files = [work / name for name in ("large.jpg", "large.png", "progressive.jpg", "odd.jpg", "small.jpg")]
+        Image.new("L", (176, 240), 160).save(work / "direct.png")
+        files = [work / name for name in ("large.jpg", "large.png", "progressive.jpg", "odd.jpg", "small.jpg", "direct.png")]
         assert all(path.stat().st_size > 2 * 1024 * 1024 for path in files[:3])
         subprocess.run([str(exe), "read", *map(str, files)], check=True)
         (work / "bad.jpg").write_bytes(b"not an image")
@@ -64,7 +77,7 @@ def main():
             file.write((work / "odd.jpg").read_bytes())
             file.truncate(50 * 1024 * 1024 + 1)
         subprocess.run([str(exe), "reject", *map(str, [work / "bad.jpg", work / "bad.png", work / "overlimit.jpg"])], check=True)
-        print("PASS: streaming baseline/progressive JPEG and PNG over 2 MiB; odd/small dimensions; corruption/limit bounds")
+        print("PASS: streaming baseline/progressive JPEG and PNG over 2 MiB; mid-decode cancellation/retry; odd/small/direct-gray dimensions; corruption/limit bounds")
 
 if __name__ == "__main__":
     main()

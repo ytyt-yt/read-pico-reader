@@ -404,6 +404,10 @@ static void lowzag_psram_free(void *ctx, void *ptr) {
     (void)ctx;
     heap_caps_free(ptr);
 }
+static int lowzag_cancel(void *context) {
+    bool (**active)(void) = context;
+    return !(*active)();
+}
 
 // 渐进式 JPEG：lowzag 在 1/1..1/8 里按“够清晰、装得下”两件事选档，避免 JPEGDEC 的固定 1/8。
 // 选档顺序是 1/1 → 1/8（先清晰后省内存）：输出不小于目标 3/4 才接受，同时不超过目标 3 倍，
@@ -412,7 +416,7 @@ static void lowzag_psram_free(void *ctx, void *ptr) {
 // JPEGDEC's fixed 1/8. The ladder runs 1/1 -> 1/8 (quality first): an output at least 3/4 of the
 // target is accepted, and at most 3x the target so a 176x240 cover does not decode a whole frame.
 static bool lowzag_gray(const uint8_t *data, size_t size, unsigned out_width, unsigned out_height,
-                        uint8_t *out) {
+                        uint8_t *out, bool (*active)(void)) {
     if (!data || !size || !out || !out_width || !out_height) return false;
     int source_w = 0, source_h = 0;
     if (lowzag_probe(data, size, &source_w, &source_h) != LOWZAG_OK) return false;
@@ -428,6 +432,7 @@ static bool lowzag_gray(const uint8_t *data, size_t size, unsigned out_width, un
     cfg.alloc = lowzag_psram_alloc;
     cfg.alloc_ctx = NULL;
     cfg.free = lowzag_psram_free;
+    if (active) { cfg.cancel = lowzag_cancel; cfg.cancel_ctx = &active; }
 
     // 目标下界：不小于显示尺寸的 3/4；上界：不超过 3 倍，避免白算。
     // Lower bound: at least 3/4 of the display size; upper bound: at most 3x it, so no wasted work.
@@ -529,7 +534,7 @@ static bool jpeg_gray(const uint8_t *data, size_t size, unsigned out_width,
 #endif
     if (have_frame && sof == 0xC2) {
 #ifdef KIIKO_USE_LOWZAG
-        if(lowzag_gray(data,size,out_width,out_height,out))return true;
+        if(lowzag_gray(data,size,out_width,out_height,out,NULL))return true;
 #endif
         return jpegdec_gray(data, size, frame_width, frame_height, out_width, out_height, out);
     }
@@ -766,9 +771,10 @@ static bool gif_gray(const uint8_t *data, size_t size, unsigned out_width, unsig
     return false;
 }
 
-typedef struct { const uint8_t *data; size_t size, pos; FILE *file; } png_input_t;
+typedef struct { const uint8_t *data; size_t size, pos; FILE *file; bool (*active)(void); } png_input_t;
 static void png_read_mem(png_structp png, png_bytep dst, png_size_t count) {
     png_input_t *input = png_get_io_ptr(png);
+    if (input->active && !input->active()) png_error(png, "cancelled PNG");
     if (count > input->size - input->pos) png_error(png, "truncated PNG");
     if (input->file) { if (fread(dst, 1, count, input->file) != count) png_error(png, "truncated PNG file"); }
     else memcpy(dst, input->data + input->pos, count);
@@ -776,7 +782,8 @@ static void png_read_mem(png_structp png, png_bytep dst, png_size_t count) {
 }
 static bool png_gray_rows(const uint8_t *data, size_t size, FILE *file, unsigned out_width,
                      unsigned out_height, uint8_t *out, uint8_t *alpha,
-                     bool (*sink)(void *, unsigned, unsigned, const uint8_t *, const uint8_t *), void *context, bool prepared) {
+                     bool (*sink)(void *, unsigned, unsigned, const uint8_t *, const uint8_t *), void *context, bool prepared,
+                     bool (*active)(void)) {
     png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!png) return false;
     png_infop info = png_create_info_struct(png);
@@ -793,7 +800,7 @@ static bool png_gray_rows(const uint8_t *data, size_t size, FILE *file, unsigned
     uint8_t *volatile rows[2] = {NULL, NULL};
     uint8_t *volatile masks[2] = {NULL, NULL};
     uint8_t *volatile output_row = NULL;
-    png_input_t input = {data, size, 0, file};
+    png_input_t input = {data, size, 0, file, active};
     bool ok = false;
     const bool keep_alpha = alpha != NULL || sink != NULL;
     if (setjmp(png_jmpbuf(png))) goto done;
@@ -813,6 +820,7 @@ static bool png_gray_rows(const uint8_t *data, size_t size, FILE *file, unsigned
         png_read_update_info(png, info);
         if (png_get_rowbytes(png, info) != out_width) goto done;
         for (unsigned y = 0; y < out_height; ++y) {
+            if (active && !active()) goto done;
             png_read_row(png, out + (size_t)y * out_width, NULL);
             decode_yield(y);
         }
@@ -847,6 +855,7 @@ static bool png_gray_rows(const uint8_t *data, size_t size, FILE *file, unsigned
     if (sink) output_row = cover_alloc(2u * out_width);
     if (xmap && ymap && rows[0] && rows[1] && (!keep_alpha || (masks[0] && masks[1])) && (!sink || output_row)) {
         for (png_uint_32 y = 0; y < height; ++y) {
+            if (active && !active()) goto done;
             png_read_row(png, row, NULL);
             decode_yield((unsigned)y);
             const int wy = (int)y - (int)crop.y;
@@ -896,7 +905,7 @@ done:
 
 static bool png_gray_input(const uint8_t *data, size_t size, FILE *file, unsigned width,
                           unsigned height, uint8_t *out, uint8_t *alpha) {
-    return png_gray_rows(data, size, file, width, height, out, alpha, NULL, NULL, false);
+    return png_gray_rows(data, size, file, width, height, out, alpha, NULL, NULL, false, NULL);
 }
 
 bool book_cover_thumbnail(const uint8_t *data, size_t size, bool png,
@@ -977,7 +986,7 @@ static bool prepared_comic_cover(const char *source, uint8_t *out, char cbz[BOOK
         if (!paths[i][0] || stat(paths[i], &st) || !S_ISREG(st.st_mode) || st.st_size < 0 || st.st_size > 512 * 1024) continue;
         FILE *file = fopen(paths[i], "rb");
         if (!file) continue;
-        bool ok = png_gray_rows(NULL, (size_t)st.st_size, file, BOOK_COVER_W, BOOK_COVER_H, out, NULL, NULL, NULL, true);
+        bool ok = png_gray_rows(NULL, (size_t)st.st_size, file, BOOK_COVER_W, BOOK_COVER_H, out, NULL, NULL, NULL, true, NULL);
         fclose(file);
         if (ok) return true;
     }
@@ -1501,10 +1510,12 @@ typedef struct {
     size_t pixels;
     unsigned blocks;
     FILE *file;
+    bool (*active)(void);
 } jpeg_file_plane_t;
 static int jpeg_file_collect(JPEGDRAW *draw) {
     jpeg_file_plane_t *plane = draw->pUser;
     if (!plane || !draw->pPixels || draw->iBpp != 8 || draw->iWidth <= 0 || draw->iHeight <= 0 || draw->x < 0 || draw->y < 0) return 0;
+    if (plane->active && !plane->active()) return 0;
     book_crop_t crop = book_cover_crop(plane->source_w, plane->source_h, plane->width, plane->height);
     const uint8_t *block = (const uint8_t *)draw->pPixels;
     // 只绘制映射到当前 MCU 的目标采样点；输出最多一屏，不创建源图平面。
@@ -1530,7 +1541,7 @@ static int jpeg_file_collect(JPEGDRAW *draw) {
 }
 static stream_jpeg_size_t jpeg_stream_read(JDEC *decoder, uint8_t *bytes, stream_jpeg_size_t count) {
     jpeg_file_plane_t *plane = decoder->device;
-    if (!plane || !plane->file) return 0;
+    if (!plane || !plane->file || (plane->active && !plane->active())) return 0;
     if (!bytes) return fseek(plane->file, (long)count, SEEK_CUR) == 0 ? count : 0;
     return (stream_jpeg_size_t)fread(bytes, 1, count, plane->file);
 }
@@ -1559,8 +1570,18 @@ static bool jpeg_baseline_file(FILE *file, unsigned source_w, unsigned source_h,
     return ok;
 }
 extern int jpegdec_gray_file(FILE *, int, unsigned, unsigned, unsigned, unsigned, bool,
-                             JPEG_DRAW_CALLBACK *, void *, unsigned *, unsigned *);
-bool book_image_file_grayscale(const char *path, bool png, unsigned width, unsigned height, uint8_t *out) {
+                             JPEG_DRAW_CALLBACK *, void *, unsigned *, unsigned *, bool (*)(void));
+static bool image_file_read(FILE *file, uint8_t *out, size_t size, bool (*active)(void)) {
+    while (size) {
+        size_t chunk = size < 16384 ? size : 16384;
+        if ((active && !active()) || fread(out, 1, chunk, file) != chunk) return false;
+        out += chunk; size -= chunk;
+    }
+    return true;
+}
+bool book_image_file_grayscale_active(const char *path, bool png, unsigned width, unsigned height,
+                                      uint8_t *out, bool (*active)(void)) {
+    if (active && !active()) return false;
     if (!path || !out || !width || !height || width > 1216 || height > 1216 || (uint64_t)width * height > 684u * 1216u) return false;
     struct stat st;
     if (stat(path, &st) || !S_ISREG(st.st_mode) || st.st_size <= 0 || (uint64_t)st.st_size > BOOK_IMAGE_FILE_MAX) return false;
@@ -1570,22 +1591,24 @@ bool book_image_file_grayscale(const char *path, bool png, unsigned width, unsig
     uint8_t head[64];
     const size_t got=fread(head,1,sizeof(head),file);
     if(book_webp_is(head,got)) {
-        if((uint64_t)st.st_size<=12u*1024u*1024u&&!fseek(file,0,SEEK_SET)) {
+        // WebP宿主解码不可协作取消；后台只预热受支持的PNG/JPEG，前台仍接受WebP签名。
+        // WebP cannot cooperate here; warm only supported PNG/JPEG, retaining foreground signature dispatch.
+        if(!active&&(uint64_t)st.st_size<=12u*1024u*1024u&&!fseek(file,0,SEEK_SET)) {
             uint8_t *image=cover_alloc((size_t)st.st_size);
             if(image) {
-                if(fread(image,1,(size_t)st.st_size,file)==(size_t)st.st_size)
+                if(image_file_read(file,image,(size_t)st.st_size,active))
                     ok=webp_gray(image,(size_t)st.st_size,width,height,out);
                 free(image);
             }
         }
     } else if(!fseek(file,0,SEEK_SET)) {
-        if (png) ok = png_gray_input(NULL, (size_t)st.st_size, file, width, height, out, NULL);
+        if (png) ok = png_gray_rows(NULL, (size_t)st.st_size, file, width, height, out, NULL, NULL, NULL, false, active);
         else {
 #if KIIKO_BOARD_METALIO47
 #ifdef ESP_PLATFORM
-            ok=metalio_jpeg_gray(NULL,(size_t)st.st_size,file,width,height,out);
+            ok=metalio_jpeg_gray_active(NULL,(size_t)st.st_size,file,width,height,out,active);
             if(ok){fclose(file);return true;}
-            if(!metalio_jpeg_fallback_allowed()){fclose(file);return false;}
+            if(!metalio_jpeg_fallback_allowed() || (active && !active())){fclose(file);return false;}
             clearerr(file);
             if(fseek(file,0,SEEK_SET)){fclose(file);return false;}
 #endif
@@ -1593,22 +1616,22 @@ bool book_image_file_grayscale(const char *path, bool png, unsigned width, unsig
             uint8_t sof = 0;
             unsigned source_w = 0, source_h = 0;
             if (file_frame(file, false, &sof, &source_w, &source_h) && !fseek(file, 0, SEEK_SET)) {
-                jpeg_file_plane_t plane = {.out = out, .width = width, .height = height};
+                jpeg_file_plane_t plane = {.out = out, .width = width, .height = height, .active = active};
                 memset(out, 255, (size_t)width * height);
                 if(sof==0xc2) {
 #ifdef KIIKO_USE_LOWZAG
                     if((uint64_t)st.st_size<=24u*1024u*1024u) {
                         uint8_t *image=cover_alloc((size_t)st.st_size);
                         if(image) {
-                            if(fread(image,1,(size_t)st.st_size,file)==(size_t)st.st_size)
-                                ok=lowzag_gray(image,(size_t)st.st_size,width,height,out);
+                            if(image_file_read(file,image,(size_t)st.st_size,active))
+                                ok=lowzag_gray(image,(size_t)st.st_size,width,height,out,active);
                             free(image);
                         }
                     }
 #endif
-                    if(!ok&&!fseek(file,0,SEEK_SET)) {
+                    if(!ok&&(!active||active())&&!fseek(file,0,SEEK_SET)) {
                         ok=jpegdec_gray_file(file,(int)st.st_size,source_w,source_h,width,height,true,
-                            jpeg_file_collect,&plane,&plane.source_w,&plane.source_h)!=0;
+                            jpeg_file_collect,&plane,&plane.source_w,&plane.source_h,active)!=0;
                         ok=ok&&plane.pixels>=(size_t)width*height;
                     }
                 } else {
@@ -1619,7 +1642,10 @@ bool book_image_file_grayscale(const char *path, bool png, unsigned width, unsig
         }
     }
     fclose(file);
-    return ok;
+    return ok && (!active || active());
+}
+bool book_image_file_grayscale(const char *path, bool png, unsigned width, unsigned height, uint8_t *out) {
+    return book_image_file_grayscale_active(path, png, width, height, out, NULL);
 }
 
 bool book_cover_load_gray(const char *p,const char *t,const char *a,uint8_t out[BOOK_COVER_W * BOOK_COVER_H],bool decode,bool *pending) {
@@ -1680,7 +1706,7 @@ bool book_png_file_layer_rows(const char *path, unsigned width, unsigned height,
         stat(path, &st) || st.st_size <= 0 || (uint64_t)st.st_size > BOOK_IMAGE_FILE_MAX) return false;
     FILE *file = fopen(path, "rb");
     if (!file) return false;
-    bool ok = png_gray_rows(NULL, (size_t)st.st_size, file, width, height, NULL, NULL, sink, context, false);
+    bool ok = png_gray_rows(NULL, (size_t)st.st_size, file, width, height, NULL, NULL, sink, context, false, NULL);
     fclose(file);
     return ok;
 }

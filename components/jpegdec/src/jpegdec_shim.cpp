@@ -71,14 +71,19 @@ int jpegdec_gray_ram(const uint8_t *data, int size, int divisor, JPEG_DRAW_CALLB
     return ok;
 }
 
+typedef struct { FILE *file; bool (*active)(void); } file_input_t;
 static int32_t file_read(JPEGFILE *file, uint8_t *buf, int32_t size) {
     if (!file || !file->fHandle || size < 0) return 0;
-    int32_t got = (int32_t)fread(buf, 1, (size_t)size, (FILE *)file->fHandle);
+    file_input_t *input = (file_input_t *)file->fHandle;
+    if (input->active && !input->active()) return 0;
+    int32_t got = (int32_t)fread(buf, 1, (size_t)size, input->file);
     file->iPos += got;
     return got;
 }
 static int32_t file_seek(JPEGFILE *file, int32_t pos) {
-    if (!file || !file->fHandle || pos < 0 || pos > file->iSize || fseek((FILE *)file->fHandle, pos, SEEK_SET)) return -1;
+    if (!file || !file->fHandle || pos < 0 || pos > file->iSize) return -1;
+    file_input_t *input = (file_input_t *)file->fHandle;
+    if ((input->active && !input->active()) || fseek(input->file, pos, SEEK_SET)) return -1;
     file->iPos = pos;
     return pos;
 }
@@ -86,7 +91,8 @@ static int32_t file_seek(JPEGFILE *file, int32_t pos) {
 // The C caller owns the file and destination plane; JPEGDEC only buffers MCUs.
 int jpegdec_gray_file(FILE *file, int size, unsigned source_w, unsigned source_h,
                      unsigned out_w, unsigned out_h, bool progressive,
-                     JPEG_DRAW_CALLBACK *draw, void *user, unsigned *scaled_w, unsigned *scaled_h) {
+                     JPEG_DRAW_CALLBACK *draw, void *user, unsigned *scaled_w, unsigned *scaled_h,
+                     bool (*active)(void)) {
     if (!file || size <= 0 || !source_w || !source_h || !draw) return 0;
     unsigned divisor = 1;
     if (progressive) divisor = 8;
@@ -96,7 +102,8 @@ int jpegdec_gray_file(FILE *file, int size, unsigned source_w, unsigned source_h
     JPEGDEC *jpeg = new (std::nothrow) JPEGDEC();
     if (!jpeg) return 0;
     int ok = 0;
-    if (jpeg->open(file, size, nullptr, file_read, file_seek, draw)) {
+    file_input_t input = {file, active};
+    if (jpeg->open(&input, size, nullptr, file_read, file_seek, draw)) {
         jpeg->setPixelType(EIGHT_BIT_GRAYSCALE);
         jpeg->setUserPointer(user);
         int option = divisor == 8 ? JPEG_SCALE_EIGHTH : divisor == 4 ? JPEG_SCALE_QUARTER : divisor == 2 ? JPEG_SCALE_HALF : 0;

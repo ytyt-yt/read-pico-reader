@@ -74,6 +74,7 @@
 #include "ui_kit.h"
 #include "ui_image_dither.h"
 #include "ui_wallpaper.h"
+#include "wallpaper_rotation.h"
 #include "ui_lock_feedback.h"
 
 static const char* TAG = "read_pico";
@@ -106,9 +107,7 @@ void app_lock_feedback(EpdiyHighlevelState *hl) {
 }
 
 static bool draw_wallpaper(uint8_t *framebuffer) {
-    const char *path = app_settings_wallpaper_path();
-    return app_settings_lock_style() == 1 &&
-        ui_wallpaper_prepare_lock(framebuffer,path);
+    return app_settings_lock_style() == 1 && wallpaper_rotation_prepare(framebuffer);
 }
 
 static cst836u_handle_t s_tp;
@@ -639,10 +638,15 @@ void enter_lock_and_sleep(
         ESP_LOGW(TAG, "lock postponed while transfer is busy");
         return;
     }
+    if (!book_cover_jobs_quiesce(2000)) {
+        read_pico_transfer_resume_after_sleep();
+        pico_boot_clear_resume();return;
+    }
     uint8_t* framebuffer = epd_hl_get_framebuffer(hl);
     // 主动拼贴只在当前页上局部显示圆锁；各样式在RAM中准备完整最终画面。
     // Manual collages show a local badge over the current page; compose each complete final frame in RAM.
     uint8_t lock_style = app_settings_lock_style();
+    if (lock_style == 1) wallpaper_rotation_begin();
     // 透明书封保留当前页面作为底图，不清白、不重排阅读页，也不读取旧阅读快照。
     // Keep the current page beneath the PNG; no white reset, reader reflow or old reader snapshot.
     if (lock_style != 3) epd_hl_set_all_white(hl);
@@ -673,6 +677,7 @@ void enter_lock_and_sleep(
     if (lock_style == 2 && lock_drawn && result == EPD_DRAW_SUCCESS) book_lock_collage_cache_commit(framebuffer);
     if (lock_style == 1 && lock_drawn && result == EPD_DRAW_SUCCESS) ui_wallpaper_cache_commit(framebuffer);
 
+    if (lock_style == 1) wallpaper_rotation_finish(lock_drawn && result == EPD_DRAW_SUCCESS);
     // PIN也只保存成功显示的原样式，密码输入层不能把兜底或键盘写成锁图。
     // PIN locks persist only successfully displayed artwork; the PIN layer must not store fallback/keypad pixels.
     if(lock_drawn && result==EPD_DRAW_SUCCESS && lock_pin_enabled() && lock_screen_save(framebuffer))

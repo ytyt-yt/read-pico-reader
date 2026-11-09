@@ -23,6 +23,8 @@ static size_t test_fwrite(const void*p,size_t n,size_t count,FILE*f){return writ
 #define fwrite test_fwrite
 #include "metalio_jpeg.c"
 '''+function('book_cover_crop',R/'main/book/book_cover.c')+r'''
+static unsigned active_polls,stop_at;
+static bool worker_active(void){return ++active_polls<stop_at;}
 static uint8_t *load(const char *p,size_t *n){FILE *f=fopen(p,"rb");assert(f);fseek(f,0,SEEK_END);*n=ftell(f);rewind(f);uint8_t *b=malloc(*n);assert(fread(b,1,*n,f)==*n);fclose(f);return b;}
 static void reference(const uint8_t *data,size_t size,unsigned dw,unsigned dh,uint8_t *out){
  struct jpeg_decompress_struct j={0};struct jpeg_error_mgr err;j.err=jpeg_std_error(&err);jpeg_create_decompress(&j);
@@ -31,7 +33,7 @@ static void reference(const uint8_t *data,size_t size,unsigned dw,unsigned dh,ui
  j.scale_num=1;j.scale_denom=scale;j.out_color_space=JCS_GRAYSCALE;assert(jpeg_start_decompress(&j));
  uint8_t *plane=malloc((size_t)j.output_width*j.output_height);assert(plane);
  while(j.output_scanline<j.output_height){JSAMPROW row=plane+(size_t)j.output_scanline*j.output_width;assert(jpeg_read_scanlines(&j,&row,1)==1);}
- assert(jpeg_finish_decompress(&j));assert(jpeg_scale(plane,j.output_width,j.output_height,j.output_width,dw,dh,out));
+ assert(jpeg_finish_decompress(&j));assert(jpeg_scale(plane,j.output_width,j.output_height,j.output_width,dw,dh,out,NULL));
  free(plane);jpeg_destroy_decompress(&j);
 }
 int main(int argc,char **argv){
@@ -40,6 +42,9 @@ int main(int argc,char **argv){
  size_t n;uint8_t *jpg=load(argv[1],&n);
  assert(jpeg_hw_shape(jpg,n,&w,&h,&pw,&ph,&gray)&&w==34&&h==28&&pw==48&&ph==32&&!gray);
  assert(metalio_jpeg_gray(jpg,n,NULL,8,8,a)&&!test_engines&&test_hw_calls==1);
+ active_polls=0;stop_at=5;
+ assert(!metalio_jpeg_gray_active(jpg,n,NULL,8,8,b,worker_active));
+ assert(active_polls>=stop_at&&active_polls<=stop_at+1&&metalio_jpeg_cancelled()&&!metalio_jpeg_fallback_allowed()&&!test_engines);
  // 每个像素与相同路径的文件解码一致，MCU填充不成为图像的一部分。
  // File and memory routes match; MCU padding must never leak into the visible image.
  FILE *f=fopen(argv[1],"rb");assert(metalio_jpeg_gray(NULL,n,f,8,8,b));assert(!memcmp(a,b,64));fclose(f);
@@ -68,9 +73,9 @@ int main(int argc,char **argv){
  // 面积缩小保留平均灰度；常量放大和居中裁切不读边界外。
  // Area reduction preserves average gray; enlargement/cropping never reads outside the source.
  uint8_t checker[256];for(int y=0;y<16;y++)for(int x=0;x<16;x++)checker[y*16+x]=(x+y)%2?255:0;
- assert(jpeg_scale(checker,16,16,16,8,8,a));for(int i=0;i<64;i++)assert(a[i]==128);
- memset(checker,37,256);assert(jpeg_scale(checker,2,2,16,8,8,a));for(int i=0;i<64;i++)assert(a[i]==37);
- assert(!jpeg_scale(checker,1,1,0,8,8,a));assert(!jpeg_hw_shape((uint8_t*)"bad",3,&w,&h,&pw,&ph,&gray));
+ assert(jpeg_scale(checker,16,16,16,8,8,a,NULL));for(int i=0;i<64;i++)assert(a[i]==128);
+ memset(checker,37,256);assert(jpeg_scale(checker,2,2,16,8,8,a,NULL));for(int i=0;i<64;i++)assert(a[i]==37);
+ assert(!jpeg_scale(checker,1,1,0,8,8,a,NULL));assert(!jpeg_hw_shape((uint8_t*)"bad",3,&w,&h,&pw,&ph,&gray));
  assert(!metalio_jpeg_gray(NULL,20,NULL,8,8,a));assert(!test_engines);
  jpg=load(argv[7],&n);assert(n>0);
  unsigned dims[][2]={{23,31},{176,240},{684,1216},{1216,684}};
@@ -87,6 +92,10 @@ int main(int argc,char **argv){
  test_time_step=1000;test_cancel_after_yields=1;assert(!metalio_jpeg_gray(jpg,n,NULL,8,8,canary));
  assert(metalio_jpeg_cancelled()&&!metalio_jpeg_fallback_allowed()&&!live_backings);test_time_step=0;test_cancel_after_yields=0;
  for(int i=0;i<64;i++)assert(canary[i]==0x91);
+ assert(metalio_jpeg_gray(jpg,n,NULL,8,8,a)&&!metalio_jpeg_cancelled()&&!live_backings);
+ active_polls=0;stop_at=80;
+ assert(!metalio_jpeg_gray_active(jpg,n,NULL,8,8,canary,worker_active));
+ assert(active_polls==stop_at&&metalio_jpeg_cancelled()&&!metalio_jpeg_fallback_allowed()&&!live_backings);
  assert(metalio_jpeg_gray(jpg,n,NULL,8,8,a)&&!metalio_jpeg_cancelled()&&!live_backings);free(jpg);
  puts("PASS: real bounded progressive bands/SD backing, pixel-identical full-plane reference at4 target sizes, cooperative cancellation/retry, backing/write failure cleanup; full-progressive file/memory decode; padded RGB/gray, red/blue order, area resampling, corruption/OOM/timeout fallback and resource cleanup (hardware mocked)");
 }

@@ -29,6 +29,10 @@ static unsigned jpeg_cancels;
 static __attribute__((unused)) void metalio_jpeg_cancel(void){++jpeg_cancels;}
 static bool media_ready_for_jobs=true;
 static bool read_pico_sd_io_ready(void){return media_ready_for_jobs;}
+static unsigned wallpaper_warms;
+static bool (*warm_active)(void);
+static void ui_wallpaper_warm_cache(const char *path,bool (*active)(void)) {assert(!strncmp(path,"/sdcard/pictures/wallpapers/",sizeof("/sdcard/pictures/wallpapers/")-1));warm_active=active;if(active())++wallpaper_warms;}
+
 static int jobs,decodes,fonts,writes,reads,mode,fail_alloc,task_ok=1,worker_context;
 static unsigned replaced;
 static uint64_t fingerprint;
@@ -137,7 +141,15 @@ int main(void){
  media_ready_for_jobs=true;assert(book_cover_jobs_recheck(generation,0,&checked)==0);
  assert(!book_cover_jobs_quiesce(0));run();assert(book_cover_jobs_quiesce(0));
  assert(book_cover_jobs_recheck(generation,0,&checked)==-1);
+ assert(book_cover_jobs_prefetch_wallpaper("/sdcard/pictures/wallpapers/a.jpg"));
+ assert(!book_cover_jobs_prefetch_wallpaper("/sdcard/pictures/wallpapers/b.jpg"));run();assert(wallpaper_warms==1);
+ assert(book_cover_jobs_prefetch_wallpaper("/sdcard/pictures/wallpapers/b.jpg"));
+ assert(!book_cover_jobs_quiesce(0));run();assert(wallpaper_warms==1&&book_cover_jobs_quiesce(0));
+ assert(!warm_active());media_ready_for_jobs=false;
+ assert(!book_cover_jobs_prefetch_wallpaper("/sdcard/pictures/wallpapers/c.jpg"));media_ready_for_jobs=true;
  free(s_jobs);s_jobs=NULL;assert(!live);
+ task_ok=0;assert(book_cover_jobs_prefetch_wallpaper("/sdcard/pictures/wallpapers/task-failed.jpg"));
+ assert(!s_running&&!s_wallpaper[0]&&!live);task_ok=1;
  puts("PASS: real bounded cover worker has no UI IO on queue/poll, packed hits skip gray/decode, stale generations and media cancellation discard results, UI-only auto glyphs, transient fallback not cached, all9 slots and OOM/task failures release resources");
 }
 '''

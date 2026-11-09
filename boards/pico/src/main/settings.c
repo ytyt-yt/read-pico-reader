@@ -59,6 +59,7 @@
 #define NVS_KEY_SYS_CONTRAST "sys_contrast"
 #define NVS_KEY_LOCK_STYLE "lock_ui"
 #define NVS_KEY_WALLPAPER "wallpaper"
+#define NVS_KEY_WALLPAPER_RANDOM "wall_random"
 #define NVS_KEY_BOOKMARK "lock_png"
 #define NVS_KEY_WAKE "lwake"
 #define NVS_KEY_BOOT "lboot"
@@ -116,6 +117,7 @@ static uint8_t s_system_size = 120;
 static uint8_t s_system_contrast = 100;
 static uint8_t s_lock_style;
 static char s_wallpaper[288];
+static bool s_wallpaper_random;
 static char s_bookmark[288];
 static uint8_t s_last_wake;
 static uint8_t s_last_boot;
@@ -277,6 +279,8 @@ void app_settings_init(void) {
     uint8_t lock_style = 0;
     if (nvs_get_u8(h, NVS_KEY_LOCK_STYLE, &lock_style) == ESP_OK && lock_style <= 3)
         s_lock_style = lock_style;
+    uint8_t wallpaper_random = 0;
+    s_wallpaper_random = nvs_get_u8(h, NVS_KEY_WALLPAPER_RANDOM, &wallpaper_random) == ESP_OK && wallpaper_random == 1;
     size_t wallpaper_len = sizeof(s_wallpaper);
     if (nvs_get_str(h, NVS_KEY_WALLPAPER, s_wallpaper, &wallpaper_len) != ESP_OK ||
         strncmp(s_wallpaper, "/sdcard/", 8)) s_wallpaper[0] = 0;
@@ -578,6 +582,18 @@ void app_settings_set_bookmark_path(const char *path) {
     if(err==ESP_OK)err=nvs_commit(h);
     nvs_close(h);
     if(err==ESP_OK)strlcpy(s_bookmark,path,sizeof(s_bookmark));
+}
+bool app_settings_wallpaper_random(void) { return s_wallpaper_random; }
+esp_err_t app_settings_set_wallpaper_random(bool enabled) {
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_u8(h, NVS_KEY_WALLPAPER_RANDOM, enabled);
+    if (enabled && err == ESP_OK) err = nvs_set_u8(h, NVS_KEY_LOCK_STYLE, 1);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    if (err == ESP_OK) { s_wallpaper_random = enabled; if (enabled) s_lock_style = 1; }
+    return err;
 }
 const char* app_settings_wallpaper_path(void) { return s_wallpaper; }
 void app_settings_set_wallpaper_path(const char* path) {
@@ -1038,7 +1054,7 @@ static bool backup_home_valid(const settings_backup_home_t *v) {
 static unsigned backup_version(const settings_backup_v1_t *backup) {
     if (memcmp(backup->magic, "PICOSET", 7)) return 0;
     unsigned char c = backup->magic[7];
-    return c >= '1' && c <= '9' ? c - '0' : c == 'A' ? 10 : c == 'B' ? 11 : c == 'C' ? 12 : c == 'D' ? 13 : c == 'E' ? 14 : c == 'F' ? 15 : c == 'G' ? 16 : c == 'H' ? 17 : c == 'I' ? 18 : c == 'J' ? 19 : c == 'K' ? 20 : c == 'L' ? 21 : c == 'M' ? 22 : 0;
+    return c >= '1' && c <= '9' ? c - '0' : c == 'A' ? 10 : c == 'B' ? 11 : c == 'C' ? 12 : c == 'D' ? 13 : c == 'E' ? 14 : c == 'F' ? 15 : c == 'G' ? 16 : c == 'H' ? 17 : c == 'I' ? 18 : c == 'J' ? 19 : c == 'K' ? 20 : c == 'L' ? 21 : c == 'M' ? 22 : c == 'N' ? 23 : 0;
 }
 
 static void backup_erase_secret(void *ptr, size_t size) {
@@ -1118,13 +1134,14 @@ static bool backup_card_ready(void) {
 esp_err_t app_settings_backup_save(void) {
     if (!backup_card_ready()) return ESP_ERR_INVALID_STATE;
     settings_backup_v1_t backup = {0};
-    memcpy(backup.magic, "PICOSETM", sizeof(backup.magic));
+    memcpy(backup.magic, "PICOSETN", sizeof(backup.magic));
     uint8_t *f = backup.flags;
     f[BK_SLEEP] = s_sleep;
     f[BK_PICKUP] = s_pickup_wake;
     f[BK_SYS_SIZE] = s_system_size;
     f[BK_SYS_CONTRAST] = s_system_contrast;
-    f[BK_LOCK] = s_lock_style;
+    // v23在样式高位保存随机模式，旧备份默认固定。/ V23 seals random mode in the style high bit; legacy backups use fixed mode.
+    f[BK_LOCK] = s_lock_style | (s_wallpaper_random ? 4 : 0);
     f[BK_BOOK_PX] = s_book_px;
     // v15复用已退役的晃动标志保存关闭抗锯齿；旧备份始终恢复开启。
     // v15 reuses the retired shake flag for disabled AA; older backups always restore AA on.
@@ -1255,7 +1272,7 @@ static bool backup_valid(const settings_backup_v1_t *backup) {
     if (f[BK_SLEEP] > APP_SLEEP_OFF || f[BK_PICKUP] > 1 ||
         f[BK_SYS_SIZE] < 100 || f[BK_SYS_SIZE] > 200 || f[BK_SYS_SIZE] % 10 ||
         f[BK_SYS_CONTRAST] < 100 || f[BK_SYS_CONTRAST] > 140 || f[BK_SYS_CONTRAST] % 10 ||
-        f[BK_LOCK] > 3 || f[BK_BOOK_PX] < BOOK_READER_PX_MIN || f[BK_BOOK_PX] > BOOK_READER_PX_MAX ||
+        f[BK_LOCK] > (backup_version(backup) >= 23 ? 7 : 3) || f[BK_BOOK_PX] < BOOK_READER_PX_MIN || f[BK_BOOK_PX] > BOOK_READER_PX_MAX ||
         f[BK_SHAKE] > 1 || (f[BK_FULL_PAGES] != 0 && f[BK_FULL_PAGES] != 5 &&
                             f[BK_FULL_PAGES] != 10 && f[BK_FULL_PAGES] != 15 &&
                             f[BK_FULL_PAGES] != 30) ||
@@ -1379,6 +1396,8 @@ esp_err_t app_settings_backup_restore(void) {
         return ESP_ERR_INVALID_RESPONSE;
     }
 
+    bool wallpaper_random = version >= 23 && (backup.flags[BK_LOCK] & 4);
+    backup.flags[BK_LOCK] &= 3;
     if(version<20) {
         int px=version<19?(int)backup.flags[BK_TRACKING]*2-4:(int)backup.flags[BK_TRACKING]-4;
         if(px>APP_BOOK_TRACK_MAX)px=APP_BOOK_TRACK_MAX;
@@ -1394,9 +1413,9 @@ esp_err_t app_settings_backup_restore(void) {
     if (backup.system_font[0] && !backup_file_exists(backup.system_font, false)) backup.system_font[0] = 0;
     if (backup.wallpaper[0] && !backup_file_exists(backup.wallpaper, false)) {
         backup.wallpaper[0] = 0;
-        if (backup.flags[BK_LOCK] == 1) backup.flags[BK_LOCK] = 0;
+        if (!wallpaper_random && backup.flags[BK_LOCK] == 1) backup.flags[BK_LOCK] = 0;
     }
-    if (!backup.wallpaper[0] && backup.flags[BK_LOCK] == 1) backup.flags[BK_LOCK] = 0;
+    if (!wallpaper_random && !backup.wallpaper[0] && backup.flags[BK_LOCK] == 1) backup.flags[BK_LOCK] = 0;
     // 已移除的书架样式保留旧编号的读取兼容，恢复时改为默认亚克力。
     // Accept retired IDs from old backups and restore the default acrylic style.
     if (backup.flags[BK_SHELF] == 3 || backup.flags[BK_SHELF] == 4) backup.flags[BK_SHELF] = 2;
@@ -1433,6 +1452,7 @@ esp_err_t app_settings_backup_restore(void) {
     BACKUP_SET_U8(NVS_KEY_SYS_SIZE, BK_SYS_SIZE);
     BACKUP_SET_U8(NVS_KEY_SYS_CONTRAST, BK_SYS_CONTRAST);
     BACKUP_SET_U8(NVS_KEY_LOCK_STYLE, BK_LOCK);
+    if (err == ESP_OK) err = nvs_set_u8(h, NVS_KEY_WALLPAPER_RANDOM, wallpaper_random);
     BACKUP_SET_U8(NVS_KEY_BOOK_PX, BK_BOOK_PX);
 
     BACKUP_SET_U8(NVS_KEY_READER_FULL, BK_FULL_PAGES);
@@ -1501,6 +1521,7 @@ esp_err_t app_settings_backup_restore(void) {
     s_system_size = f[BK_SYS_SIZE];
     s_system_contrast = f[BK_SYS_CONTRAST];
     s_lock_style = f[BK_LOCK];
+    s_wallpaper_random = wallpaper_random;
     s_book_px = f[BK_BOOK_PX];
 
     s_reader_full_pages = f[BK_FULL_PAGES];

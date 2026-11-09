@@ -61,6 +61,7 @@
 #include "ui_kit.h"
 #include "ui_image_dither.h"
 #include "ui_wallpaper.h"
+#include "wallpaper_rotation.h"
 #include "ui_lock_feedback.h"
 #include "e0470_epaper_waveform.h"
 #include "ota_online.h"
@@ -176,8 +177,7 @@ void app_lock_feedback(EpdiyHighlevelState *hl) {
 }
 
 static bool draw_wallpaper(uint8_t *framebuffer) {
-    return app_settings_lock_style() == 1 &&
-        ui_wallpaper_prepare_lock(framebuffer, app_settings_wallpaper_path());
+    return app_settings_lock_style() == 1 && wallpaper_rotation_prepare(framebuffer);
 }
 
 void app_lock_wait_key_idle(int timeout_ms) {
@@ -874,6 +874,11 @@ void enter_lock_and_sleep(
         ESP_LOGW(TAG, "lock postponed while transfer is busy");
         return;
     }
+    if (!book_cover_jobs_quiesce(2000)) {
+        read_pico_transfer_resume_after_sleep();
+        metalio_frontlight_restore();
+        pico_boot_clear_resume();return;
+    }
     if (ble_pt_suspend_for_sleep()!=ESP_OK) {
         read_pico_transfer_resume_after_sleep();
         metalio_frontlight_restore();
@@ -886,6 +891,7 @@ void enter_lock_and_sleep(
     // Clear only target memory; retain the old physical page until the complete collage is ready.
     epd_poweroff();
     uint8_t lock_style = app_settings_lock_style();
+    if (lock_style == 1) wallpaper_rotation_begin();
     // 壁纸先在内存准备完整画面，再从真实back一次全像素GC48；不提前推白，也不伪造白底历史。
     // 票根/拼贴保留既有擦白；透明PNG仍先从最后成功帧合成，再由图片出口清理物理旧态。
     // Prepare wallpaper in memory and present once with full-pixel GC48 from actual back history.
@@ -920,6 +926,7 @@ void enter_lock_and_sleep(
         (int)result, (long long)((transfer_at - lock_at) / 1000),
         (long long)((radio_at - transfer_at) / 1000), (long long)((draw_at - radio_at) / 1000),
         (long long)((presented_at - draw_at) / 1000), (long long)((presented_at - lock_at) / 1000));
+    if (lock_style == 1) wallpaper_rotation_finish(lock_drawn && result == EPD_DRAW_SUCCESS);
     if (result != EPD_DRAW_SUCCESS && !lock_pin_enabled()) {
         // 推屏失败不宣布锁屏完成；恢复本页与灯光，允许再次尝试。
         // A failed presentation does not enter sleep; restore the page and lamp for another attempt.

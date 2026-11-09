@@ -74,7 +74,9 @@ static bool avatar_content_crop(const uint8_t *gray, unsigned width, unsigned he
     return true;
 }
 
-static bool image_pixels(uint8_t *fb, uint8_t *pixels, const char *path, EpdRect area, int radius) {
+static bool image_pixels(uint8_t *fb, uint8_t *pixels, const char *path, EpdRect area, int radius,
+                         bool (*active)(void)) {
+    if (active && !active()) return false;
     if ((!fb && !pixels) || !path || strncmp(path, "/sdcard/", 8) ||
         area.width <= 0 || area.height <= 0 ||
         area.x < 0 || area.y < 0 ||
@@ -113,7 +115,8 @@ static bool image_pixels(uint8_t *fb, uint8_t *pixels, const char *path, EpdRect
     }
     uint8_t *gray = ok ? heap_caps_malloc((size_t)width * height, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : NULL;
     if (!gray) ok = false;
-    if (ok) ok = book_image_file_grayscale(path, png, width, height, gray);
+    if (ok) ok = active ? book_image_file_grayscale_active(path, png, width, height, gray, active)
+                        : book_image_file_grayscale(path, png, width, height, gray);
     if (!ok) { free(gray); return false; }
     ui_wallpaper_crop_t center = ui_wallpaper_center_crop(width, height,
                                                            (unsigned)area.width, (unsigned)area.height);
@@ -122,7 +125,8 @@ static bool image_pixels(uint8_t *fb, uint8_t *pixels, const char *path, EpdRect
     if (radius > 0) avatar_content_crop(gray, width, height, area,
                                         &crop_x, &crop_y, &crop_w, &crop_h);
 
-    for (int y = area.y; y < area.y + area.height; ++y)
+    for (int y = area.y; y < area.y + area.height; ++y) {
+        if (active && !active()) { free(gray); return false; }
         for (int x = area.x; x < area.x + area.width; ++x) {
             if (!pixels && !inside_rounded(area, radius, x, y)) continue;
             int source_x = crop_x + (int)((int64_t)(x - area.x) * crop_w / area.width);
@@ -131,17 +135,18 @@ static bool image_pixels(uint8_t *fb, uint8_t *pixels, const char *path, EpdRect
             if (pixels) pixels[(size_t)(y-area.y)*area.width + x-area.x] = value;
             else epd_draw_pixel(x,y,ui_image_dither_gray(value,x,y),fb);
         }
+    }
     free(gray);
     return true;
 }
 
 bool ui_wallpaper_draw(uint8_t *fb, const char *path, EpdRect area) {
-    return image_pixels(fb, NULL, path, area, 0);
+    return image_pixels(fb, NULL, path, area, 0, NULL);
 }
 
 bool ui_wallpaper_draw_rounded(uint8_t *fb, const char *path, EpdRect area, int radius) {
     if (radius < 0 || radius > area.width / 2 || radius > area.height / 2) return false;
-    return image_pixels(fb, NULL, path, area, radius);
+    return image_pixels(fb, NULL, path, area, radius, NULL);
 }
 
 void ui_wallpaper_draw_avatar(uint8_t *fb, const uint8_t *pixels, EpdRect area, int radius) {
@@ -188,44 +193,93 @@ static uint64_t wallpaper_key(const char *path,const struct stat *st) {
     h=wallpaper_hash(h,&size,sizeof(size));
     return wallpaper_hash(h,&modified,sizeof(modified));
 }
-bool ui_wallpaper_prepare_lock(uint8_t *fb,const char *path) {
-    s_wall_pending_fb=NULL;
+#ifndef WALL_SET_CACHE_PARENT
+#define WALL_SET_CACHE_PARENT "/sdcard/.kiikoread"
+#endif
+static char s_wall_pending_path[192];
+static bool wallpaper_cache_path(const char *path, const wallpaper_cache_t *h, char cache[192]) {
+    const char *prefix = "/sdcard/pictures/wallpapers/";
+    if (strncmp(path, prefix, strlen(prefix))) {
+        snprintf(cache, 192, "%s", WALL_LOCK_CACHE);
+        return false;
+    }
+    snprintf(cache, 192, WALL_SET_CACHE_PARENT "/locks/wallpapers/%s-%u-%u-%016llx.bin",
+#if KIIKO_BOARD_METALIO47
+        "s31",
+#else
+        "pico",
+#endif
+        h->version, h->rotation, (unsigned long long)h->key);
+    return true;
+}
+static bool wallpaper_prepare(uint8_t *fb, const char *path, wallpaper_cache_t *pending, char cache[192],
+                              bool (*active)(void)) {
     struct stat st;
     if (!fb || !path || strncmp(path,"/sdcard/",8) || stat(path,&st) || !S_ISREG(st.st_mode) || st.st_size<=0) return false;
     wallpaper_cache_t wanted={.magic=WALL_LOCK_MAGIC,.version=WALL_LOCK_VERSION,
         .width=UI_LOCK_WIDTH,.height=UI_LOCK_HEIGHT,.rotation=epd_get_rotation(),
         .bytes=WALL_LOCK_BYTES,.key=wallpaper_key(path,&st)};
-    FILE *file=fopen(WALL_LOCK_CACHE,"rb");
+    (void)wallpaper_cache_path(path,&wanted,cache);
+    FILE *file=fopen(cache,"rb");
     if (file) {
         wallpaper_cache_t h;
         bool good=fread(&h,1,sizeof(h),file)==sizeof(h) && h.magic==wanted.magic && h.version==wanted.version &&
             h.key==wanted.key && h.width==wanted.width && h.height==wanted.height && h.rotation==wanted.rotation &&
-            h.bytes==wanted.bytes && fread(fb,1,WALL_LOCK_BYTES,file)==WALL_LOCK_BYTES && fgetc(file)==EOF &&
+            h.bytes==wanted.bytes && fread(fb,1,WALL_LOCK_BYTES,file)==WALL_LOCK_BYTES && fgetc(file)==EOF && !ferror(file) &&
             h.checksum==wallpaper_hash(UINT64_C(14695981039346656037),fb,WALL_LOCK_BYTES);
         fclose(file);
         if (good) return true;
     }
-    if (!ui_wallpaper_draw(fb,path,(EpdRect){0,0,UI_LOCK_WIDTH,UI_LOCK_HEIGHT})) return false;
+    if (!image_pixels(fb,NULL,path,(EpdRect){0,0,UI_LOCK_WIDTH,UI_LOCK_HEIGHT},0,active)) return false;
     struct stat after;
-    if (!stat(path,&after) && after.st_size==st.st_size && after.st_mtime==st.st_mtime) {
-        s_wall_pending=wanted; s_wall_pending_fb=fb;
-    }
+    if (!stat(path,&after) && after.st_size==st.st_size && after.st_mtime==st.st_mtime && wanted.rotation==(uint32_t)epd_get_rotation())
+        *pending=wanted;
     return true;
+}
+static void wallpaper_store(const uint8_t *fb, wallpaper_cache_t h, const char *cache) {
+    if (!h.magic) return;
+    bool set = !strncmp(cache, WALL_SET_CACHE_PARENT "/locks/wallpapers/", strlen(WALL_SET_CACHE_PARENT "/locks/wallpapers/"));
+    const char *parent = set ? WALL_SET_CACHE_PARENT : UI_WALLPAPER_CACHE_PARENT;
+    char locks[160];snprintf(locks,sizeof(locks),"%s/locks",parent);
+    if ((mkdir(parent,0777) && errno!=EEXIST) || (mkdir(locks,0777) && errno!=EEXIST) ||
+        (set && mkdir(WALL_SET_CACHE_PARENT "/locks/wallpapers",0777) && errno!=EEXIST)) return;
+    h.checksum=wallpaper_hash(UINT64_C(14695981039346656037),fb,WALL_LOCK_BYTES);
+    char temporary[200],backup[200];
+    snprintf(temporary,sizeof(temporary),"%s.tmp",cache);snprintf(backup,sizeof(backup),"%s.bak",cache);
+    FILE *file=fopen(temporary,"wb");
+    if (!file) return;
+    bool good=fwrite(&h,1,sizeof(h),file)==sizeof(h) && fwrite(fb,1,WALL_LOCK_BYTES,file)==WALL_LOCK_BYTES && !fflush(file);
+    if (fclose(file)) good=false;
+    if (good) {
+        if (!rename(temporary,cache)) return;
+        // FAT不能覆盖重命名；失败保留旧缓存。/ FAT cannot replace by rename; retain the old cache on failure.
+        (void)remove(backup);
+        if (!rename(cache,backup)) {
+            if (!rename(temporary,cache)) { (void)remove(backup); return; }
+            (void)rename(backup,cache);
+        }
+    }
+    (void)remove(temporary);
+}
+bool ui_wallpaper_prepare_lock(uint8_t *fb,const char *path) {
+    s_wall_pending_fb=NULL;memset(&s_wall_pending,0,sizeof(s_wall_pending));
+    bool ok=wallpaper_prepare(fb,path,&s_wall_pending,s_wall_pending_path,NULL);
+    if (ok && s_wall_pending.magic) s_wall_pending_fb=fb;
+    return ok;
 }
 void ui_wallpaper_cache_commit(const uint8_t *fb) {
     bool pending=fb && fb==s_wall_pending_fb;
     s_wall_pending_fb=NULL;
-    if (!pending) return;
-    if ((mkdir(UI_WALLPAPER_CACHE_PARENT,0777) && errno!=EEXIST) ||
-        (mkdir(UI_WALLPAPER_CACHE_PARENT "/locks",0777) && errno!=EEXIST)) return;
-    wallpaper_cache_t h=s_wall_pending;
-    h.checksum=wallpaper_hash(UINT64_C(14695981039346656037),fb,WALL_LOCK_BYTES);
-    FILE *file=fopen(WALL_LOCK_CACHE ".tmp","wb");
-    if (!file) return;
-    bool good=fwrite(&h,1,sizeof(h),file)==sizeof(h) && fwrite(fb,1,WALL_LOCK_BYTES,file)==WALL_LOCK_BYTES;
-    if (fclose(file)) good=false;
-    if (good && !rename(WALL_LOCK_CACHE ".tmp",WALL_LOCK_CACHE)) return;
-    (void)remove(WALL_LOCK_CACHE ".tmp");
+    if (pending) wallpaper_store(fb,s_wall_pending,s_wall_pending_path);
+}
+void ui_wallpaper_warm_cache(const char *path, bool (*active)(void)) {
+    // 独立短命画布和缓存描述，不接触屏幕或前台待提交记录。/ A private transient canvas/header never touches the panel or foreground commit.
+    if (!active() || heap_caps_get_free_size(MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT)<WALL_LOCK_BYTES+3u*1024u*1024u) return;
+    uint8_t *fb=heap_caps_malloc(WALL_LOCK_BYTES,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if (!fb) return;
+    wallpaper_cache_t pending={0};char cache[192];
+    if (active() && wallpaper_prepare(fb,path,&pending,cache,active) && active()) wallpaper_store(fb,pending,cache);
+    free(fb);
 }
 
 #define AVATAR_CACHE_MAGIC UINT32_C(0x41565431)
@@ -255,7 +309,7 @@ bool ui_wallpaper_prepare_avatar(const char *path,uint8_t *pixels,int side) {
     wallpaper_cache_t h,after;char cache_path[160],after_path[160];
     if(!pixels||!avatar_cache_header(path,side,&h,cache_path))return false;
     if(ui_wallpaper_avatar_cached(path,pixels,side))return true;
-    if(!image_pixels(NULL,pixels,path,(EpdRect){0,0,side,side},1))return false;
+    if(!image_pixels(NULL,pixels,path,(EpdRect){0,0,side,side},1,NULL))return false;
     // 文件在解码期间变化或卡不可写时直接使用当前像素，不存过期/半写的文件。
     // Use decoded pixels without saving stale or partial files if the source changes or storage is unwritable.
     if(!avatar_cache_header(path,side,&after,after_path)||after.key!=h.key||

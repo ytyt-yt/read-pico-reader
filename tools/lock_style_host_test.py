@@ -49,9 +49,14 @@ static unsigned cached_style;
 static jmp_buf deep;
 static const char *app_settings_wallpaper_path(void){return "/sdcard/wallpaper.jpg";}
 static uint8_t app_settings_lock_style(void){return style;}
+static void wallpaper_rotation_begin(void){}
+static void wallpaper_rotation_finish(bool displayed){(void)displayed;}
+static bool book_cover_jobs_quiesce(unsigned ms){assert(ms==2000);return true;}
+static bool wallpaper_rotation_prepare(uint8_t *fb);
 static bool lock_pin_enabled(void){return pin;}
 static bool draw(unsigned chosen,uint8_t *fb){assert(chosen==style&&panel[0]==(feedback_seen?0xff:current_background));if(chosen==3)assert(fb[0]==(boot_cache?0xff:current_background));++draws[chosen];memset(fb,0x10+chosen,FRAME_BYTES);frame_ready=draw_ok;return draw_ok;}
 static bool ui_wallpaper_prepare_lock(uint8_t *fb,const char *path){assert(!strcmp(path,app_settings_wallpaper_path()));return draw(1,fb);}
+static bool wallpaper_rotation_prepare(uint8_t *fb){return ui_wallpaper_prepare_lock(fb,app_settings_wallpaper_path());}
 static void ui_wallpaper_cache_commit(const uint8_t *fb){assert(style==1&&draw_ok&&presents==1&&fb==pixels&&!memcmp(panel,pixels,FRAME_BYTES));}
 static bool book_ticket_draw(uint8_t *fb,bool background){assert(background==reader);return draw(0,fb);}
 static const char *app_settings_bookmark_path(void){return "/sdcard/overlay.png";}

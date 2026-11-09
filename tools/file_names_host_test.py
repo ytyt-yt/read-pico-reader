@@ -76,10 +76,14 @@ if 'book_epub_metadata_cached_for_file' in book.read_text():
     unit+='static int book_epub_metadata_cached_for_file(const char*p,uint64_t size,int64_t modified,char*t,size_t n,char*a,size_t z){(void)size;(void)modified;return book_epub_metadata_cached(p,t,n,a,z); }\n'
 unit+='enum{EXPECTED_SCAN_STAT='+('4' if 'book_epub_metadata_cached_for_file' in function('scan_shelf_dir',book) else '7')+'};\n'
 unit+='static int shelf_stat_calls;static int shelf_stat(const char*p,struct stat*s){++shelf_stat_calls;return stat(p,s); }\n#define stat(p,s) shelf_stat(p,s)\n'
-for name in ['copy_text','clean_filename','scan_shelf_dir','shelf_backfill_visit']:
+for name in ['copy_text','clean_filename','scan_shelf_dir','shelf_cbz_in_books','shelf_backfill_visit']:
     unit+=function(name,book).replace('s_count','shelf_count').replace('s_view','shelf_view')+'\n'
 unit+='\n#undef stat\n'
 home=root/'main/apps/app_dashboard.c'
+if 'book_comics_context' in function('title_for',home):
+    unit+='#define BOOK_COMICS_ROOT "/sdcard/comics"\n'
+    for name in ('visible','chapter_name','series_path','book_comics_context'):
+        unit+=function(name,root/'main/book/book_comics.c')+'\n'
 unit+='typedef struct{char path[288],title[256],author[128];}home_book_t;\n'+function('copy_title',home)+'\n'+function('title_for',home)+'\n'
 unit+=r'''
 int main(void){

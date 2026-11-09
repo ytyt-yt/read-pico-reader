@@ -91,6 +91,7 @@ static int ui_content_width(void){return 612;}
 '''
 unit+='\n'.join(line for line in (root/'main/ui/ui_book_manage_layout.h').read_text().splitlines() if not line.startswith(('#include','#pragma')))+'\n'
 unit+='static bool s_bulk_grid;\n'
+unit += function('ui_shelf_row',root/'main/ui/ui_shelf.c')+'\n'
 for name in ('shelf_rows','row_rect','shelf_cover_image'):
     unit += function(name,root/'main/apps/app_book.c')+'\n'
 unit += catalog + '\n' + count + '\n' + function('draw_style_thumbnail', source) + '\n'

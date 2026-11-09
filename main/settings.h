@@ -106,6 +106,9 @@ uint8_t app_settings_lock_style(void);
 void app_settings_set_lock_style(uint8_t style);
 const char* app_settings_bookmark_path(void);
 void app_settings_set_bookmark_path(const char *path);
+/// 随机壁纸默认关闭；启用时原子切换壁纸样式，保留固定图片。/ Random defaults off; enabling atomically selects wallpaper style and retains the fixed image.
+bool app_settings_wallpaper_random(void);
+esp_err_t app_settings_set_wallpaper_random(bool enabled);
 const char* app_settings_wallpaper_path(void);
 void app_settings_set_wallpaper_path(const char* path);
 /// 上次浅睡唤醒源（app_wake_source_t），掉电也保留。/ Last light-sleep wake source (app_wake_source_t); kept across power loss.
