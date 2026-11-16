@@ -40,6 +40,8 @@ layout=s[s.index('typedef struct {\n    EpdRect size, preview;'):s.index('static
 unit=r'''
 #include <assert.h>
 #include <stdbool.h>
+static bool app_settings_shelf_progress_badges(void){return true;}
+static bool app_settings_set_shelf_progress_badges(bool value){(void)value;return true;}
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>

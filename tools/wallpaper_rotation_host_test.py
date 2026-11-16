@@ -52,6 +52,11 @@ int main(void){
  FILE*f=fopen("card/fixed.jpg","wb");assert(f&&fputc('F',f)!=EOF&&!fclose(f));uint8_t frame=0;
  assert(wallpaper_rotation_prepare(&frame)&&frame=='F');
  random_enabled=true;assert(!wallpaper_rotation_refresh());new_frame(&frame);assert(frame=='F');wallpaper_rotation_finish(true);
+ // 云壁纸的XTH格式复用相同随机队列、成功提交与删除失效路径。
+ // Cloud XTH wallpapers share the shuffle, presentation commit and deletion paths.
+ f=fopen("card/pictures/wallpapers/cloud.XTH","wb");assert(f&&fputc('T',f)!=EOF&&!fclose(f));
+ assert(wallpaper_rotation_refresh()==1);new_frame(&frame);assert(frame=='T'&&strstr(wallpaper_rotation_path(),"cloud.XTH"));wallpaper_rotation_finish(true);
+ assert(!remove("card/pictures/wallpapers/cloud.XTH"));assert(!wallpaper_rotation_refresh());
  for(unsigned i=0;i<80;++i)image(i,'A'+i%20);
  assert(wallpaper_rotation_refresh()==80&&!wallpaper_rotation_overflow());
  bool seen[80]={0};char previous[288]="";

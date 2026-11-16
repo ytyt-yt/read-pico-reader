@@ -22,11 +22,13 @@ unit=r'''
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "reader_controls.h"
 typedef struct {int x,y,width,height;}EpdRect;
 enum EpdFontFlags {EPD_DRAW_ALIGN_LEFT,EPD_DRAW_ALIGN_CENTER,EPD_DRAW_ALIGN_RIGHT};
 #define UI_LOCK_WIDTH 684
 #define UI_LOCK_HEIGHT 1216
 #define UI_GRAY_WHITE 255
+#define UI_NAV_BACKGROUND_GRAY 0xe0
 #define UI_GRAY_BLACK 0
 #define UI_INK_WHITE 15
 #define UI_INK_BLACK 0
@@ -35,7 +37,9 @@ enum EpdFontFlags {EPD_DRAW_ALIGN_LEFT,EPD_DRAW_ALIGN_CENTER,EPD_DRAW_ALIGN_RIGH
 enum {UI_ICON_CHEVRON_RIGHT,UI_ICON_ROTATE_CW};
 #define TTF_FONT_NAME_MAX 64
 #define TTF_FONT_SLOT_SYSTEM 0
-static unsigned scale=100,face;
+static unsigned scale=100,face,s_rc_tab;static struct{bool running;}s_rc_auto;
+static void ui_text_set_system_scale(bool enabled){(void)enabled;}
+const reader_controls_config_t*app_settings_reader_controls(void){static reader_controls_config_t c;return &c;}
 static int selected_slot=2;
 static bool antialias;
 static bool ttf_get_antialias(void){return antialias;}
@@ -47,6 +51,7 @@ static bool scaling=true,s_system_ttf;
 static unsigned glyphs;
 static EpdRect last_box, image_text_boxes[2];
 static bool rule_probe;static int rule_style_label_bottom,rule_offset_label_bottom,rule_hint_bottom;
+static bool reading_probe;static unsigned reading_labels,reading_switches;
 static bool image_probe;static unsigned image_text_count,image_switches;
 static int s_reader_slider=-1,s_reader_preview_px=32,s_px=32;
 static unsigned app_settings_system_font_size(void){return scale;}
@@ -59,8 +64,10 @@ static void ttf_measure_line_px(int px,const char *text,int *above,int *below){(
 static void ui_font_measure_line_px(int px,const char *text,int *above,int *below){ttf_measure_line_px(px,text,above,below);}
 static void ui_text_fixed_vc(uint8_t *fb,int x,int cy,int px,const char *text,enum EpdFontFlags align,bool inv){
  (void)fb;(void)inv;int above,below;ttf_measure_line_px(px,text,&above,&below);
+ if(px==23&&(!strcmp(text,"书内自带字体")||!strcmp(text,"抗锯齿")))last_box=(EpdRect){x,cy-22,188,44};
  int w=ui_text_fixed_width_px(px,text),baseline=cy+(above-below)/2;
  int left=align==EPD_DRAW_ALIGN_LEFT?x:align==EPD_DRAW_ALIGN_RIGHT?x-w:x-w/2;
+ if(left<last_box.x||left+w>last_box.x+last_box.width)fprintf(stderr,"text=%s scale=%u px=%d left=%d width=%d box=%d,%d,%d,%d\n",text,scale,px,left,w,last_box.x,last_box.y,last_box.width,last_box.height);
  assert(left>=last_box.x&&left+w<=last_box.x+last_box.width);
  assert(baseline-above>=last_box.y&&baseline+below<=last_box.y+last_box.height);
  assert(!strchr(text,'\n'));++glyphs;
@@ -77,6 +84,7 @@ static void ui_fill_rect_fast(EpdRect r,int color,uint8_t *fb){epd_fill_rect(r,c
 static void epd_fill_circle(int x,int y,int radius,int color,uint8_t *fb){(void)x;(void)y;(void)radius;(void)color;(void)fb;}
 static void epd_draw_circle(int x,int y,int radius,int color,uint8_t *fb){epd_fill_circle(x,y,radius,color,fb);}
 static void ui_fill_round_rect(uint8_t *fb,EpdRect r,int radius,int color){(void)fb;(void)radius;(void)color;assert(r.x>=0&&r.x+r.width<=684&&r.y>=0);
+ if(reading_probe&&r.width==69&&r.height==39)++reading_switches;
  if(image_probe&&r.width==69&&r.height==39){assert(image_text_count==2);for(unsigned i=0;i<2;++i)assert(image_text_boxes[i].y+image_text_boxes[i].height<=r.y || image_text_boxes[i].x+image_text_boxes[i].width+12<=r.x);++image_switches;}
 }
 static void ui_draw_control_frame(uint8_t *fb,EpdRect r,int radius,int color){ui_fill_round_rect(fb,r,radius,color);}
@@ -84,7 +92,7 @@ static void ui_draw_icon(uint8_t *fb,int x,int y,int px,int icon,int color){(voi
 static void copy_text(char *to,size_t cap,const char *from){snprintf(to,cap,"%s",from);}
 static int app_settings_book_weight_fine(void){return 2;}
 #define APP_BOOK_WEIGHT_FINE_MAX 32
-static bool app_settings_book_vertical(void){return true;}
+
 static bool app_settings_book_fonts(void){return true;}
 static bool app_settings_book_antialias(void){return true;}
 static unsigned rule_style=2;
@@ -97,18 +105,22 @@ static const char *ttf_font_display_name(void){return "测试字体的名称";}
 static unsigned app_settings_reader_full_pages(void){return 15;}
 static unsigned app_settings_reader_turn_effect(void){return 1;}
 static bool app_settings_reader_vertical_turn(void){return true;}
-static bool app_settings_reader_power_turn(void){return true;}
-static bool app_settings_reader_default_fullscreen(void){return true;}
-static bool app_settings_reader_immersive(void){return false;}
-static bool app_settings_reader_hide_images(void){return false;}
+
+
+
+
 #define BOOK_KIND_CBZ 2
-static int book_kind(void){return 0;}
-static bool reader_images_hidden(void){return app_settings_reader_hide_images();}
+
+
 '''
 unit+=function('ui_text_box',kit).replace('void ui_text_box(', 'static void actual_text_box(')+'\n'
 unit+=r'''
 static void ui_text_box(uint8_t *fb,EpdRect box,int px,const char *text,enum EpdFontFlags align,bool inv){
  assert(box.x>=0&&box.y>=0&&box.x+box.width<=684&&box.y+box.height<=1216);
+ if(reading_probe){
+  static const char *const labels[]={"文字设置","排版设置","阅读显示","阅读线","翻页效果","全刷间隔","自动翻页","翻页间隔","触摸操作","点击翻页区域","按键控制"};
+  for(unsigned i=0;i<11;++i)if(!strcmp(text,labels[i])){assert(!(reading_labels&(1u<<i)));reading_labels|=1u<<i;}
+ }
  if(image_probe){assert(image_text_count<2);image_text_boxes[image_text_count++]=box;}
  if(rule_probe){
   if(!strcmp(text,"选择样式"))rule_style_label_bottom=box.y+box.height;
@@ -125,10 +137,10 @@ static void draw_reading_font_name(uint8_t *fb,EpdRect box,const char *text){
  actual_reading_font_name(fb,box,text);assert(selected_slot==old_slot&&antialias==old_aa);
 }
 '''
-unit+=function('draw_sheet',book)+'\n'
+unit+=function('draw_sheet',book)+'\n'+function('rc_root_top',ROOT/'main/apps/book_reader_controls_ui.inc')+'\n'
 for name in ('reader_ui_extra','reader_font_top','reader_font_card','reader_slider_rect',
              'draw_pill_slider','draw_font_pair','reading_setting_rect','reading_settings_top',
-             'reading_toggle_rect','draw_reading_switch','draw_reading_card','draw_reading_toggle'):
+             'reading_toggle_rect','draw_reading_switch','draw_reading_toggle'):
     unit+=function(name,book)+'\n'
 for name in ['s_font_card','s_weight_card','s_bookfont_card','s_layout_card','s_rule_card','s_antialias_card']:
     unit+=re.search(r'^#define '+name+r' .*',s,re.M)[0]+'\n'
@@ -138,7 +150,10 @@ for name in ['s_rule_offset_up','s_rule_offset_reset','s_rule_offset_down']:
 for name in ['rule_style_rect','rule_span_rect','draw_rule_settings']:
     unit+=function(name,book)+'\n'
 unit+=function('reader_weight_value',book)+'\n'
+for name in ('rc_done_rect','rc_tab_rect','rc_grid_rect','rc_effect_rect','rc_refresh_rect','rc_auto_card','rc_interval_rect','rc_text','rc_card','rc_done','rc_link','rc_toggle_card','rc_draw_settings'):
+    unit+=function(name,ROOT/'main/apps/book_reader_controls_ui.inc')+'\n'
 unit+=function('draw_font_settings',book)+'\n'+function('draw_reading_settings',book)+'\n'
+
 unit+=function('reader_font_picker_top',book)+'\n'+function('reader_font_pick_rect',book)+'\n'
 unit+='static bool s_bookmark_edit;\n'+function('bookmark_row_step',book)+'\n'+function('bookmark_rows',book)+'\n'+function('bookmark_row_rect',book)+'\n'
 unit+=r'''
@@ -146,7 +161,7 @@ static bool overlap(EpdRect a,EpdRect b){return a.x<b.x+b.width&&b.x<a.x+a.width
 int main(void){uint8_t fb[1]={0};
  for(face=0;face<3;++face)for(scale=100;scale<=200;scale+=10){
    image_probe=KIIKO_BOARD_METALIO47;image_text_count=0;draw_reading_toggle(fb,2,"关闭书内图片","跳过正文插图，保留原书文件",true);image_probe=false;
-   draw_font_settings(fb);assert(!antialias&&selected_slot==2);draw_reading_settings(fb);
+   draw_font_settings(fb);assert(!antialias&&selected_slot==2);
    for(int style=0;style<3;++style)for(int full=0;full<2;++full){
     rule_style=style;rule_full=full;rule_probe=true;draw_rule_settings(fb);rule_probe=false;
     assert(rule_style_label_bottom<=rule_style_rect(0).y);
@@ -155,9 +170,14 @@ int main(void){uint8_t fb[1]={0};
    }
    EpdRect rule_controls[]={rule_style_rect(0),rule_style_rect(1),rule_style_rect(2),rule_span_rect(0),rule_span_rect(1),s_rule_offset_up,s_rule_offset_reset,s_rule_offset_down,{36,1113,612,72}};
    for(unsigned i=0;i<sizeof(rule_controls)/sizeof(rule_controls[0]);++i)for(unsigned j=0;j<i;++j)assert(!overlap(rule_controls[i],rule_controls[j]));
-   for(int i=0;i<6;++i){EpdRect a=reader_font_card(i);assert(a.y>=reader_font_top()+100&&a.y+a.height<1141);for(int j=0;j<i;++j)assert(!overlap(a,reader_font_card(j)));}
+   for(int i=0;i<4;++i){EpdRect a=reader_font_card(i);assert(a.y>=reader_font_top()+100&&a.y+a.height<1141);for(int j=0;j<i;++j)assert(!overlap(a,reader_font_card(j)));}
    EpdRect slider=reader_slider_rect(0);assert(slider.y>reader_font_top()+100&&slider.y+slider.height<reader_font_card(0).y);
-   for(int i=0;i<9;++i){EpdRect a=reading_setting_rect(i);assert(a.y>=reading_settings_top()+100&&a.y+a.height<1141);for(int j=0;j<i;++j)assert(!overlap(a,reading_setting_rect(j)));}
+   int top=reading_settings_top();
+   reading_labels=reading_switches=0;reading_probe=true;
+   for(s_rc_tab=0;s_rc_tab<3;++s_rc_tab)draw_reading_settings(fb);
+   reading_probe=false;assert(reading_labels==2047&&reading_switches==1&&reading_settings_top()==top);
+   for(int i=0;i<4;++i){EpdRect a=rc_grid_rect(i);assert(a.y>=top+150&&a.y+a.height<1141);for(int j=0;j<i;++j)assert(!overlap(a,rc_grid_rect(j)));}
+   for(int i=0;i<(KIIKO_BOARD_METALIO47?3:4);++i){EpdRect a=rc_effect_rect(i);assert(a.x>=36&&a.x+a.width<=648);for(int j=0;j<i;++j)assert(!overlap(a,rc_effect_rect(j)));}
    for(int i=0;i<9;++i){EpdRect a=reader_font_pick_rect(i);assert(a.y>reader_font_picker_top()+120&&a.y+a.height<1141);for(int j=0;j<i;++j)assert(!overlap(a,reader_font_pick_rect(j)));}
    for(int edit=0;edit<2;++edit){s_bookmark_edit=edit;assert(bookmark_rows()>=3);for(int row=0;row<bookmark_rows();++row){EpdRect a=bookmark_row_rect(row);assert(a.y+a.height<=560+(edit?520:600));if(row)assert(!overlap(a,bookmark_row_rect(row-1)));}}
  }
@@ -172,5 +192,5 @@ with tempfile.TemporaryDirectory(dir=ROOT/'build') as folder:
     view=ROOT/".kiiko-source-view.json"
     boards=(int(json.loads(view.read_text())["board"]=="metalio47"),) if view.exists() else (0,1)
     for board in boards:
-        subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',f'-DKIIKO_BOARD_METALIO47={board}',str(c),'-o',str(b)],check=True)
+        subprocess.run(['cc','-I'+str(ROOT/'main'),'-std=gnu11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',f'-DKIIKO_BOARD_METALIO47={board}',str(c),'-o',str(b)],check=True)
         subprocess.run([str(b)],check=True)

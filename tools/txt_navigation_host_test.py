@@ -41,6 +41,8 @@ static void tracked_free(void *p){
 }
 #define free tracked_free
 #include "book_txt.c"
+bool book_index_cache_prepare_file(const char *path,const char *kind,uint32_t schema,uint64_t size,int64_t modified,char *out,size_t cap,book_index_cache_header_t *header){(void)path;(void)kind;(void)schema;(void)size;(void)modified;(void)out;(void)cap;(void)header;return false;}
+uint16_t book_epub_cached_chapter_count(const char *path,uint32_t size,int64_t modified){(void)path;(void)size;(void)modified;return 0;}
 #include "book_source.c"
 // TXT用例不允许进入漫画路径；空句柄关闭是通用书源的正常清理。
 // TXT fixtures must never enter comic routes; closing a null handle is normal source cleanup.

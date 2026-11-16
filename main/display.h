@@ -63,6 +63,8 @@ enum EpdDrawError update_display_fast_page(EpdiyHighlevelState* hl);
 /// Arm fixed navigation for the next main-screen output; tag shelf exit and actual navigation so same-page repaints do not animate.
 void display_main_transition_arm(const void* owner, bool leaving_shelf, bool changing_page);
 #if KIIKO_BOARD_METALIO47
+/// 仅真实快刷跨主页的背景擦白许可；调用后须恢复原值。/ Scoped fast root background permission; restore after presentation.
+bool display_main_fast_background_set(bool active);
 /// Scope extra white erasure to an actual switch between visible main tabs; returns the previous scope.
 bool display_main_switch_erase_set(bool active);
 /// 仅书架切回首页的下半内容区增强擦白，返回旧作用域。/ Scope stronger lower-body white drive to shelf-to-home only; returns prior scope.
@@ -180,8 +182,14 @@ int display_pclk_mhz(void);
 /// On underrun, drop to the safe clock and full-refresh; other error bits are ignored.
 void guard_draw_result(EpdiyHighlevelState* hl, enum EpdDrawError result);
 
-/// 根页切换补白许可：0关闭、6普通、8涉及书架，仅在一次真实根页推屏中生效并恢复。
-/// Scope board root whitening:0 off,6 ordinary,8 involving the shelf; restore the prior value after presentation.
+#if !KIIKO_BOARD_METALIO47
+/// PICO 阅读分区独立提交，防止对齐跨过正文和信息栏的边界。/ Present Pico reader regions without aligning into neighboring chrome.
+enum EpdDrawError update_display_reader_area(EpdiyHighlevelState *hl,
+    const EpdWaveform *wave, enum EpdDrawMode mode, EpdRect area, bool full);
+#endif
+
+/// 根页切换补白许可：0关闭、6普通、8涉及书架，PICO快刷为10，仅在一次推屏中生效并恢复。
+/// Scope board root whitening:0 off,6 ordinary,8 involving the shelf,10 for Pico fast switches; restore the prior value after presentation.
 unsigned display_main_quality_set(unsigned white_phases);
 
 #ifdef __cplusplus

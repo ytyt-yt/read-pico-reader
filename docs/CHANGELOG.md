@@ -1,5 +1,62 @@
 # 版本变更 / Changelog
 
+## Fork 2026-11-16 — Pico rc108 / S31 rc114
+
+- 同步上游5c568a7，保留漫画与随机壁纸；Pico清晰水波纹接入新版阅读设置和快捷切换，普通水波纹采用上游更新。
+  Sync upstream5c568a7 while retaining comics/random wallpapers; expose Pico Clear ripple through the new reader sheets and quick actions, adopting upstream's ordinary ripple.
+- 双板共用最新封面重试、预热与取消队列，漫画来源指纹复查及随机壁纸预热继续有效；随机目录支持XTH云壁纸。
+  Share current cover retries, warming and cancellation while retaining comic fingerprint checks and wallpaper warming; random folders also accept cloud XTH files.
+- 修正S31抗锯齿标定的整字墨量限幅，避免大字被固定65280阈值截断；保留上游实机标定默认值。Pico非热路径按体积优化，保留原分区及正文热路径优化。
+  Bound S31 calibrated whole-glyph ink by its pixel area while retaining the upstream hardware-tuned defaults. Size-optimize Pico cold paths, preserving partitions and hot reader optimization.
+
+## 小纸 PICO 0.3.3-rc108 / Metalio S31 0.3.3-rc114 — 2026-11-16
+
+- **双机型**：提前准备书架首页，进入书架后继续预热后续页。缓存封面整页显示，切页和开书可打断后台工作。
+- **双机型**：书架管理新增一键获取 TXT 封面。支持微信读书和 Z-Library、模糊匹配、手选候选小图及 TF 卡缓存。缺少封面时使用统一的书名封面。
+- **双机型**：票根读取实际章节位置，按正文停留时间统计阅读时长。阅星瞳导入校验 TXT 完整性，开书异常后跳过该书自动续读。
+- **PICO**：阅读页脚页码使用局部刷新，继续阅读模块去掉浅灰背景。
+- **S31**：短锁屏保留 TF 挂载，浅睡唤醒集中恢复，按设置单击或双击唤醒，并沿用 RC113 的翻页参数。修复获取封面时的 Wi-Fi 重启和 HTTPS 收包失败。
+
+Both boards prewarm shelf pages, batch ready cover updates, fetch TXT covers from WeRead and Z-Library, cache selections on the TF card, and align ticket chapters and reading time with the reader. PICO refreshes page numbers locally. S31 retains TF mounts during brief locks, applies the configured wake gesture, keeps RC113 page-turn settings, and improves cover-fetch network stability.
+
+## Metalio S31 0.3.3-rc113 — 2026-11-12
+
+- 修复首次进入书架时只显示底部封面、加载提示停留的问题。书架先显示书名和已就绪的封面，后台完成一批就补画一批，加载结束后自动清除提示。
+- Fix missing covers and a stuck loading message on first shelf entry. Show titles and ready covers while the rest load, then automatically clear the loading hint.
+
+## 正式发布 / Release — 2026-11-12
+
+- **小纸 PICO 0.3.3-rc107、Metalio S31 0.3.3-rc112**：设置列表快速滑动松手后直接滚动约半屏，松手即清理残影。阅读缓存迁入 TF 卡的 `.kiikoread` 目录。
+- **PICO**：阅读及主页切换恢复 RC104 刷新方式，阅读空闲 8 秒后关闭屏幕电源。锁屏浅睡前确认屏幕断电，失败时重试。
+- **S31**：合入 Moku 的书架封面缓存与失败重试、低内存 Wi-Fi 和传书优化、阅读页脚本章页码、跨文件脚注修复与手动屏幕修复。星瞳云同步上报 S31 型号 `metalio47`。
+
+Both boards scroll about half a page after a quick flick and clear list ghosting on release. Reader caches use `.kiikoread`. PICO restores the RC104 reader and home refresh behavior and verifies panel power-off before light sleep. S31 incorporates Moku’s shelf, networking, reader and panel-repair improvements.
+
+## 本地测试 / Local test — 2026-11-12
+
+- S31 阅读翻页回退：rc111 起产品/CI 构建默认开启的 S31 实验档（`--s31-pie`、`--s31-text-ripple`、`--s31-reader-panel37`）导致实机阅读翻页效果明显变差；现产品/默认构建恢复原生48相阅读翻页与C像素算子，实验改为仅显式本地开关，且只作用于 S31（Pico 不变）。以 rc112 源码的无实验构建（sha256 `6d73dced71a3be1a44fd6916738756f6c55ee20b9579978a9d2048c24313f576`）真机验证翻页效果恢复。本地测试，未发布官网/OTA。
+  S31 reader-turn rollback: the S31 experiments (`--s31-pie`, `--s31-text-ripple`, `--s31-reader-panel37`) that product/CI builds enabled by default from rc111 visibly degraded page turns on hardware. Product/default builds now restore the native 48-phase reader turn and C pixel kernels; the experiments remain explicit local opt-ins and affect S31 only (Pico unchanged). Verified on hardware with an experiment-free build of the rc112 source (sha256 `6d73dced71a3be1a44fd6916738756f6c55ee20b9579978a9d2048c24313f576`). Local test only; nothing is published.
+
+- S31 阅读抗锯齿：Debug 调试页新增「抗锯齿微调 AA」，可实时调整覆盖率 gamma、补字边缘偏置、补字墨量，样例含正文/大字/补字字形，当前值显示在屏上并打印到串口。实机手动微调后固化 S31 默认：gamma `0.800`、补字边缘偏置 `256`、补字墨量 `122%`；Pico 的覆盖率/补字默认保持原值。以 rc113 源码构建（sha256 `c35b7779ed205e485a856e4702d7e4d7cc9e5766193f94df3027ba286d8f596d`）烧录验证。本地测试，未发布官网/OTA。
+  S31 reader anti-aliasing: the boot Debug page gains an "AA tuning" screen for coverage gamma, supplement edge bias and supplement ink percent, with live body/large/supplement samples, on-screen values and serial logging. After hardware tuning the S31 defaults are baked to gamma `0.800`, supplement edge bias `256` and ink `122%`; Pico's coverage/supplement defaults are unchanged. Verified with an rc113-source build (sha256 `c35b7779ed205e485a856e4702d7e4d7cc9e5766193f94df3027ba286d8f596d`). Local test only; nothing is published.
+
+- S31 XTH 云壁纸：星瞳云下发的壁纸为 `.xth`（22 字节小端头 + 双位平面、列主序、4 级灰阶），此前被当作不支持类型拒绝。现在云同步会校验头部/尺寸并保存到 `Pictures`；设置壁纸/锁屏、图片页、阅读背景和文件管理均支持 `.xth` 的预览与选用（解码按官方 xtx SPEC：从右到左列主序、MSB 在上，4 级映射白/深灰/浅灰/黑并按比例裁切填满）。以 rc113 源码构建（sha256 `890337348146d36f5abae57f9db765b4ed3da9e403c642116da13b4edb1ad68a`）烧录验证。Pico 使用同一份解码与壁纸/云同步共享代码，并同步更新 Pico 专属的图片页/文件管理/壁纸列表覆盖；Pico rc107 构建通过（sha256 `c34fc26d908ca7f855a88a7f688dad5ac575b68933a3c61c1570ce968164d605`），实机烧录验证待连接 Pico 后补测。本地测试，未发布官网/OTA。
+  S31 XTH cloud wallpapers: the Xteink cloud delivers wallpapers as `.xth` (22-byte little-endian header plus column-major dual bit-planes, four gray levels), which used to be rejected as an unsupported type. Cloud sync now validates the header/size and saves them to `Pictures`; wallpapers/lock, the image page, reader backgrounds and Files all preview and select `.xth` (decoded per the official xtx SPEC: right-to-left column-major, MSB topmost, levels mapped to white/dark gray/light gray/black and cropped to fill). Verified with an rc113-source build (sha256 `890337348146d36f5abae57f9db765b4ed3da9e403c642116da13b4edb1ad68a`). Pico shares the same decoder, wallpaper and cloud-sync sources, with its own image page, Files and wallpaper-list overlays updated as well; the Pico rc107 build passes (sha256 `c34fc26d908ca7f855a88a7f688dad5ac575b68933a3c61c1570ce968164d605`), with hardware verification pending until a Pico is connected. Local test only; nothing is published.
+
+## 本地测试 / Local test — 2026-11-11
+
+- S31 书架封面：修复“逐本揭示”时先到达的封面被整页门控按占位标题推屏、脏标记随即清掉而不再补画的问题，改为每格按自身就绪状态绘制；封面任务失败不再永久跳过，按行退避重试（3 次后留占位并每 5 秒再试），TF 挂载交接期间保留请求不丢格；进入书架/换页时先同步读取卡上成品封面缓存，首帧即带封面，只有缓存缺失才进后台解码。继承上轮默认封面不落盘、封面缓存 schema 作废旧“假封面”及 S31 JPEGDEC 小平面兜底。S31 本地测试，版本号保持 rc110，未发布官网/OTA。
+  S31 shelf covers: per-cell reveal no longer pushes early covers as title placeholders whose dirty bits are then cleared; failed cover jobs retry with per-row backoff (three attempts, then a placeholder retried every five seconds) and survive card mount handoffs; entering or paging the shelf preloads finished rasters from the card so the first frame carries covers and only cache misses reach the background decoder. Inherit the previous round's no-default-cover persistence, cache-schema invalidation of poisoned covers and S31 JPEGDEC plane fallback. Local S31 test only; version stays rc110 and nothing is published.
+
+- S31 rc111 整页书架缓存：含“默认/生成封面”的页面不再写入整页缓存（封面任务结果新增 generated 标记），整页缓存 artwork 版本 3→4 作废旧缓存；生成封面也不再进入 RAM/精简列表缓存，避免一次解码失败被当成真封面固化。全部为真封面的页面保留原缓存加速，失败的书每次进入都会重新尝试解码。S31 本地测试（rc111 同步源码），未发布官网/OTA。
+  S31 rc111 whole-page shelf cache: pages containing a generated default cover are no longer captured (the cover result now carries a generated flag), and the page-cache artwork version is bumped 3→4 to discard old entries; generated covers also stop entering the RAM/sized-list caches so a single decode failure cannot masquerade as a real cover. Pages made only of real covers keep the cache acceleration and failed books retry decoding on every entry. Local S31 test on the rc111 sync source; nothing is published.
+
+- S31 星曈云同步型号：`XTEINK_SYNC_DEVICE_TYPE` 由两板共用的 `pico` 改为分板型号，S31 上报 `metalio47`（Metalio E-Ink4 Plus 的 S31 板），Pico 保持 `pico`；S31 在星曈 App 里不再显示为小纸 Pico。App 对未注册型号仍会带第三方应用名 “CrossLink” 前缀，需云端注册型号后才能显示 Metalio 产品名；硬件身份、MAC、绑定令牌与 Pico 行为均不变。本地测试，未发布官网/OTA。
+  S31 Xteink cloud model: `XTEINK_SYNC_DEVICE_TYPE` is now board-specific instead of the shared `pico`, with S31 reporting `metalio47` (the Metalio E-Ink4 Plus S31 board) and Pico keeping `pico`, so S31 no longer appears as 小纸 Pico in the Xteink app. The app still prefixes unregistered models with the third-party app name "CrossLink"; a cloud-side model registration is needed for the product name. Hardware identity, MACs, saved tokens and Pico behaviour are unchanged. Local test only; nothing is published.
+
+- S31 rc111 WiFi/传书内存：BLE 控制器约占 40KB 内部 RAM；“仅联网”会话（连接路由器/对时/云端同步）原设计不释放 BLE，rc111 下开始前内部 RAM 只剩约 61KB，WiFi 静态 RX 缓冲初始化失败（`wifi:malloc buffer fail`）并在界面提示“连接启动失败”。现在内部 RAM <100KB 时会话开始前也释放 BLE；传书启动前等待 internal/DMA 余量达标并对 `esp_wifi_init` 有界重试（最多 4s+3 次）；独占传书 16 槽大 RX 池仅在内部 RAM ≥128KB 时启用；字体槽元数据 9KB 挪到 PSRAM。S31 真机验证：释放 BLE 后内部 RAM 100KB/ DMA 34KB，WiFi 连接成功并拿到 IP。
+  S31 rc111 WiFi/transfer memory: the BLE controller holds ~40 KB internal RAM; network-only sessions (router connect/time sync/cloud) used to keep BLE alive, leaving only ~61 KB and failing WiFi static RX buffer init (`wifi:malloc buffer fail`), which surfaced as "connection start failed". Sessions now also release BLE when internal RAM is below 100 KB; transfer start waits for internal/DMA headroom and retries `esp_wifi_init` (up to 4 s + 3 attempts); the bulk 16-slot RX pool is only enabled with ≥128 KB internal RAM, and the 9 KB font-slot metadata moved to PSRAM. Verified on S31: after BLE release internal RAM 100 KB / DMA 34 KB and WiFi connected with an IP.
+
 ## 本地测试 / Local test — 2026-11-09
 
 - 双板本地新增随机锁屏壁纸：设置 → 锁屏样式 → 壁纸锁屏可选固定或随机，随机读取 TF `pictures/wallpapers` 单层 JPG/JPEG/PNG（最多256张），整组洗牌轮换并避免轮次交界连播同图。只在新锁屏且显示成功后提交进度，唤醒/PIN保留本次图片；逐图16灰缓存通过既有封面队列空闲预热，解码中可取消；损坏图片有界跳过，失败批次跨锁屏继续，固定图片和原锁屏出口保留。设置备份v23兼容恢复旧版本，版本号不变。
@@ -35,6 +92,14 @@
 
 - 跨文件脚注：正文里的 `文件#片段` 链接现在会到目标 XHTML 的 id 元素取注释文本，弹窗显示；注释页里指回正文的 key/back/noteref 回跳链接自动跳过。文字注号（如“注１”）也按排版位置可点，热区按字号放大；图标注号保持原行为。
   Cross-file footnotes: body links of the form `file#fragment` now pull the note text from the target XHTML's id element and show it in the pop-up; key/back/noteref back-links inside note pages are skipped. Text markers (e.g. "注１") are tappable from their typeset position with a padded hotspot; icon markers keep their old behaviour.
+
+## Pico 0.3.3-rc106 / Metalio S31 0.3.3-rc111
+
+- 阅读设置按排版、翻页与手势分组。自动翻页间隔为 1–10 秒，切换全屏时保持开启。
+- 支持自定义触摸动作，左右横滑固定翻页，底部三个上滑区域可分别设置。
+- 书架补充进度和已读标记，可按阅读进度排序。
+- Pico 在阅读正文及工具面板空闲时保留已上电的 EPD 高压供电，退出阅读恢复 8 秒空闲断电。
+- 两板同步阅星瞳导入、蓝牙翻页器适配和书架缓存改动。S31 同步电量显示策略。
 
 ## Pico 0.3.3-rc105 / Metalio S31 0.3.3-rc110 — 2026-11-04
 

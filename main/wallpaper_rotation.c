@@ -132,7 +132,7 @@ unsigned wallpaper_rotation_refresh(void) {
     while (dir && (entry = readdir(dir))) {
         if (entry->d_name[0] == '.') continue;
         const char *ext = strrchr(entry->d_name, '.');
-        if (!ext || (strcasecmp(ext, ".jpg") && strcasecmp(ext, ".jpeg") && strcasecmp(ext, ".png"))) continue;
+        if (!ext || (strcasecmp(ext, ".jpg") && strcasecmp(ext, ".jpeg") && strcasecmp(ext, ".png") && strcasecmp(ext, ".xth"))) continue;
         char path[288];
         if (snprintf(path, sizeof(path), "%s/%s", WALLPAPER_ROTATION_DIR, entry->d_name) >= (int)sizeof(path) || !valid_path(path)) continue;
         struct stat st;

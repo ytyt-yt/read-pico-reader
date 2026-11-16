@@ -58,6 +58,9 @@ const EpdWaveform* display_reader_clear_water_waveform(void) {return &reader_cle
 const EpdWaveform* display_main_clean_waveform_with_phases(const EpdWaveform* wave,enum EpdDrawMode mode,unsigned white) {
     assert(wave&&(mode==MODE_GL16||mode==MODE_DU)&&white>=6&&white<=8);return wave;
 }
+const EpdWaveform* display_main_fast_white_waveform(const EpdWaveform* wave, enum EpdDrawMode mode) {
+    (void)wave; (void)mode; assert(false); return NULL;
+}
 const EpdWaveform* display_main_water_waveform(void) {return &soft_gray;}
 const EpdWaveform* display_main_normal_waveform(void) { return display_main_water_waveform(); }
 const EpdWaveform* display_main_ui_waveform(void) {return display_main_normal_waveform();}
@@ -69,6 +72,7 @@ int epd_rotated_display_height(void) { return 1216; }
 
 #define FB_BYTES 128
 const EpdWaveform E0470_WAVEFORM = {0}, E0470_FOLLOW_WAVEFORM = {1}, E0470_GRAY8_WAVEFORM = {2}, E0470_FULL_WAVEFORM = {3};
+const EpdWaveform PICO_SETTINGS_MOTION_WAVEFORM = {4};
 static uint8_t target[FB_BYTES], presented[FB_BYTES];
 static int clocks, powerons, clears, draws, full_draws, safe_clock, prefill, last_mode, last_scan;
 static bool white_baseline, correct_target_at_draw;
@@ -171,6 +175,12 @@ enum EpdDrawError epd_hl_update_area_full(EpdiyHighlevelState* hl, enum EpdDrawM
 }
 // 与 highlevel.c:142 相同：白后缓冲后，强制整屏推目标前缓冲。
 // Match highlevel.c:142: whiten the back buffer, then force a full update from the target front buffer.
+enum EpdDrawError epd_hl_update_area_diff_exact(EpdiyHighlevelState *hl, enum EpdDrawMode mode, int temp, EpdRect area) {
+    return epd_hl_update_area(hl, mode, temp, area);
+}
+enum EpdDrawError epd_hl_update_area_full_exact(EpdiyHighlevelState *hl, enum EpdDrawMode mode, int temp, EpdRect area) {
+    return epd_hl_update_area_full(hl, mode, temp, area);
+}
 enum EpdDrawError epd_hl_update_screen_from_white(EpdiyHighlevelState* hl, enum EpdDrawMode mode, int temperature) {
     memset(hl->back_fb, 255, FB_BYTES);
     return epd_hl_update_screen_full(hl, mode, temperature);
@@ -393,6 +403,21 @@ int main(void) {
     rails_idle_check(28001); assert(poweroffs == old_offs + 1);
     assert(draws == old_draws && clears == old_clears);
     assert(!memcmp(front, target, FB_BYTES) && !memcmp(back, target, FB_BYTES));
+    now_us = INT64_C(3640000000);
+    release_failures = 1000;
+    assert(update_display_area_diff_with(&hl, &E0470_WAVEFORM, MODE_GL16,
+                                        (EpdRect){0,160,16,16}) == EPD_DRAW_SUCCESS);
+    old_offs = poweroffs; old_releases = drive_releases;
+    rails_idle_check(3640049); assert(drive_releases == old_releases && poweroffs == old_offs);
+    rails_idle_check(3640050); assert(drive_active && poweroffs == old_offs);
+    rails_idle_check(3647999); assert(poweroffs == old_offs);
+    rails_idle_check(3648000); assert(!drive_active && poweroffs == old_offs + 1);
+    old_releases = drive_releases;
+    rails_idle_check(3658000); assert(drive_releases == old_releases && poweroffs == old_offs + 1);
+    release_failures = 0;
+    assert(draws == old_draws && clears == old_clears && !ota_display_depth);
+    assert(!memcmp(front, target, FB_BYTES) && !memcmp(back, target, FB_BYTES));
+    puts("reader idle rails: eight-second power-off and neutral-write fault timeout passed");
     puts("idle drive release: no-change output, bounded I2C retry, no extra scans and unchanged HV burst timeout passed");
     puts("display recovery: front retained, locked blind panel repair, single final frame, retry/failure recovery and bulk prefill passed");
 }

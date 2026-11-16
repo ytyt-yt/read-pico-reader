@@ -46,7 +46,7 @@ int main(void){
 '''
 with tempfile.TemporaryDirectory() as tmp:
  p=Path(tmp)
- for phases in (53,64,65):
+ for phases in (41,45,53,64,65):
   # 只替换oracle的相数，保持真实扫描及LUT回调。/ Change only the oracle phase count, retaining real scan/LUT callbacks.
   oracle=re.sub(r'\b37\b',str(phases),prefix)
   constants=f'#define TEST_PHASES {phases}\n#define TEST_TICKS {phases+7}\n'

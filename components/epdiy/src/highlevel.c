@@ -186,7 +186,7 @@ EpdRect _inverse_rotated_area(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 }
 
 static enum EpdDrawError hl_update_area(
-    EpdiyHighlevelState* state, enum EpdDrawMode mode, int temperature, EpdRect area, bool force_full
+    EpdiyHighlevelState* state, enum EpdDrawMode mode, int temperature, EpdRect area, bool force_full, bool exact
 ) {
     assert(state != NULL);
     // Not right to rotate here since this copies part of buffer directly
@@ -197,21 +197,6 @@ static enum EpdDrawError hl_update_area(
     area.y = rotated_area.y;
     area.width = rotated_area.width;
     area.height = rotated_area.height;
-
-#if KIIKO_BOARD_METALIO47
-    // S31 retains its existing aligned scan/commit contract.
-#else
-    // Pico computes SIMD differences in32-column blocks, but only the requested
-    // pixels may be driven or committed. In portrait the padding can hit the footer.
-    if (area.x < 0) { area.width += area.x; area.x = 0; }
-    if (area.y < 0) { area.height += area.y; area.y = 0; }
-    if (area.width > epd_width() - area.x) area.width = epd_width() - area.x;
-    if (area.height > epd_height() - area.y) area.height = epd_height() - area.y;
-    if (area.width <= 0 || area.height <= 0) {
-        epd_leading_skip_discard();
-        return EPD_DRAW_SUCCESS;
-    }
-#endif
 
     uint32_t ts = esp_timer_get_time() / 1000;
 
@@ -225,9 +210,9 @@ static enum EpdDrawError hl_update_area(
         state->dirty_columns
     );
 
+    int x_start, x_stop;
+    epd_difference_column_range(area, &x_start, &x_stop);
     if (force_full) {
-        int x_start, x_stop;
-        epd_difference_column_range(area, &x_start, &x_stop);
         const int fb_h = epd_height();
         const int y0 = area.y < 0 ? 0 : area.y;
         const int y1 = area.y + area.height > fb_h ? fb_h : area.y + area.height;
@@ -239,24 +224,23 @@ static enum EpdDrawError hl_update_area(
         diff_area.height = y1 - y0;
     }
 
-    if (diff_area.height == 0 || diff_area.width == 0) {
+    if (exact && x_stop > x_start) {
+        // 差分读取保持32列对齐；驱动和回写都限定在原区域。
+        // Keep aligned differential reads, but drive and commit only the requested region.
+        const int first = area.x > x_start ? area.x : x_start;
+        const int end = area.x + area.width < x_stop ? area.x + area.width : x_stop;
+        for (int x = x_start; x < first; ++x)
+            state->dirty_columns[x / 2] &= (uint8_t)~(0x0fu << (4 * (x & 1)));
+        for (int x = end; x < x_stop; ++x)
+            state->dirty_columns[x / 2] &= (uint8_t)~(0x0fu << (4 * (x & 1)));
+        x_start = first;
+        x_stop = end;
+    }
+
+    if (diff_area.height <= 0 || diff_area.width <= 0 || x_start >= x_stop) {
         epd_leading_skip_discard();
         return EPD_DRAW_SUCCESS;
     }
-
-#if KIIKO_BOARD_METALIO47
-    // S31 retains its existing aligned scan/commit contract.
-#else
-    // Keep aligned interlacing, then mask its padding even for full-pixel GL16.
-    // Equal-gray LUT entries can contain black pulses, so equal framebuffer
-    // values alone cannot protect the unread progress track.
-    const int crop_end = area.x + area.width;
-    memset(state->dirty_columns, 0, (size_t)(area.x / 2));
-    if (area.x & 1) state->dirty_columns[area.x / 2] &= 0xF0;
-    if (crop_end & 1) state->dirty_columns[crop_end / 2] &= 0x0F;
-    memset(state->dirty_columns + (crop_end + 1) / 2, 0,
-           (size_t)(epd_width() / 2 - (crop_end + 1) / 2));
-#endif
 
     uint32_t t1 = esp_timer_get_time() / 1000;
 
@@ -279,14 +263,7 @@ static enum EpdDrawError hl_update_area(
 
     uint32_t t2 = esp_timer_get_time() / 1000;
 
-    // Commit only the physical scan bounds; never consume deferred pixels outside them.
-    int x_start, x_stop;
-#if KIIKO_BOARD_METALIO47
-    epd_difference_column_range(area, &x_start, &x_stop);
-#else
-    x_start = area.x;
-    x_stop = area.x + area.width;
-#endif
+    // 回写范围和差分实际算过的列段一致：段外的像素没被驱动，back_fb 不能跟着改。
     diff_area.x = x_start;
     diff_area.y = 0;
     diff_area.width = x_stop - x_start;
@@ -334,13 +311,25 @@ static enum EpdDrawError hl_update_area(
 enum EpdDrawError epd_hl_update_area(
     EpdiyHighlevelState* state, enum EpdDrawMode mode, int temperature, EpdRect area
 ) {
-    return hl_update_area(state, mode, temperature, area, false);
+    return hl_update_area(state, mode, temperature, area, false, false);
 }
 
 enum EpdDrawError epd_hl_update_area_full(
     EpdiyHighlevelState* state, enum EpdDrawMode mode, int temperature, EpdRect area
 ) {
-    return hl_update_area(state, mode, temperature, area, true);
+    return hl_update_area(state, mode, temperature, area, true, false);
+}
+
+enum EpdDrawError epd_hl_update_area_diff_exact(
+    EpdiyHighlevelState *state, enum EpdDrawMode mode, int temperature, EpdRect area
+) {
+    return hl_update_area(state, mode, temperature, area, false, true);
+}
+
+enum EpdDrawError epd_hl_update_area_full_exact(
+    EpdiyHighlevelState *state, enum EpdDrawMode mode, int temperature, EpdRect area
+) {
+    return hl_update_area(state, mode, temperature, area, true, true);
 }
 
 void epd_hl_set_all_white(EpdiyHighlevelState* state) {

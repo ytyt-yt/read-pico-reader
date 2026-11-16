@@ -91,6 +91,7 @@ static void ui_fill_rect_fast(EpdRect r,int gray,uint8_t *fb){ui_fill_round_rect
 static void ui_hairline(uint8_t *fb,int y,int x,int w,int gray){ui_fill_rect_fast((EpdRect){x,y,w,1},gray,fb);}
 '''
 unit += source[source.index('static size_t s_chapter_jump_page;'):source.index('// 微调长按只更新预览')]
+unit += function('book_ticket_format_time',ROOT/'main/book/book_ticket_data.inc')+'\n'
 unit += function('ui_text_box', ROOT/'main/ui/ui_kit.c').replace('void ui_text_box(', 'static void actual_text_box(') + '\n'
 unit += '\n#define READER_STATS_TOP 586\n#define READER_JUMP_TOP 518\n'
 for name in ('reader_page_offset', 'reader_chapter_jump_count', 'reader_chapter_jump_current', 'reader_stats_control_rect', 'reader_chapter_key_rect',

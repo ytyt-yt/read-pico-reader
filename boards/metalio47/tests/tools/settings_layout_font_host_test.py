@@ -41,6 +41,8 @@ layout=s[s.index('typedef struct {\n    EpdRect size, preview;'):s.index('static
 unit=r'''
 #include <assert.h>
 #include <stdbool.h>
+static bool app_settings_shelf_progress_badges(void){return true;}
+static bool app_settings_set_shelf_progress_badges(bool v){(void)v;return true;}
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -127,10 +129,10 @@ int main(void){
    assert(SETTINGS_DISPLAY_Y>SETTINGS_WIRELESS_Y+3*SETTINGS_ROW_H);
    assert(SETTINGS_PERSONAL_Y>SETTINGS_DISPLAY_Y+6*SETTINGS_ROW_H);
    const int tops[]={SETTINGS_WIRELESS_Y,SETTINGS_DISPLAY_Y,SETTINGS_PERSONAL_Y,SETTINGS_MAINTENANCE_Y};
-   const int counts[]={3,8,5,6};
+   const int counts[]={3,8,6,6};
    const int destinations[][8]={{-1,SETTINGS_BLUETOOTH,SETTINGS_TIME},
      {SETTINGS_SYSTEM_FONT,SETTINGS_SYSTEM_CONTRAST,SETTINGS_MAIN_REFRESH,-2,SETTINGS_AUTO_LOCK,-2,SETTINGS_POWER_SLEEP,SETTINGS_FRONTLIGHT},
-     {SETTINGS_SHELF_STYLE,SETTINGS_LOCK_STYLE,SETTINGS_LOCK_PIN,-3,-5},
+     {SETTINGS_SHELF_STYLE,-2,SETTINGS_LOCK_STYLE,SETTINGS_LOCK_PIN,-3,-5},
      {SETTINGS_UPGRADE,SETTINGS_SD_RECOVERY,SETTINGS_CONFIG,-4,SETTINGS_BOOT,SETTINGS_FACTORY_RESET}};
    for(int group=0;group<4;++group)for(int i=0;i<counts[group];++i){
      s_page=SETTINGS_MAIN;int center=tops[group]+i*SETTINGS_ROW_H+SETTINGS_ROW_H/2;s_main_scroll=center-500;ctx.request_app=NULL;

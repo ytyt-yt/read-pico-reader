@@ -93,6 +93,11 @@ static void native_pixels(uint32_t cp,int px){
  free(expected);
 }
 int main(int argc,char**argv){
+#if KIIKO_BOARD_METALIO47
+ assert(ttf_aa_tune_get_cover_gamma()==0.8f&&ttf_aa_tune_get_edge_bias()==256&&ttf_aa_tune_get_ink_percent()==122);
+ ttf_aa_tune_set_cover_gamma(0.5f);ttf_aa_tune_set_edge_bias(0);ttf_aa_tune_set_ink_percent(100);
+#endif
+
  assert((argc==2||argc==3)&&ttf_font_open_builtin()==ESP_OK&&ttf_font_is_builtin());
  int native_wen=ttf_text_width_px(48,"文"),native_xing=ttf_text_width_px(48,"行");
  ui_hanzi_cache_t reference={0};uint32_t sample=0;
@@ -211,7 +216,7 @@ int main(int argc,char**argv){
  unit=unit.replace('QUALITY_SIZES',','.join(map(str,quality['sizes'])) if quality else '0')
  unit=unit.replace('QUALITY_ROWS',','.join('{'+str(row['cp'])+',{'+','.join(map(str,row['ink']))+'}}' for row in quality['glyphs']) if quality else '{0,{0}}')
  (w/'test.c').write_text(unit)
- flags=['cc','-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-unused-variable','-fsanitize=address,undefined','-ffunction-sections','-fdata-sections','-I'+str(w),'-I'+str(ROOT/'main/font'),'-I'+str(ROOT/'main/book'),'-I'+str(ROOT/'main'),'-I'+str(ROOT/'tools/ui_gesture_stubs')]
+ flags=['cc','-DKIIKO_BOARD_METALIO47='+str(int(json.loads((ROOT/'.kiiko-source-view.json').read_text())['board']=='metalio47') if (ROOT/'.kiiko-source-view.json').exists() else 0),'-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-unused-variable','-fsanitize=address,undefined','-ffunction-sections','-fdata-sections','-I'+str(w),'-I'+str(ROOT/'main/font'),'-I'+str(ROOT/'main/book'),'-I'+str(ROOT/'main'),'-I'+str(ROOT/'tools/ui_gesture_stubs')]
  gc='-Wl,-dead_strip' if os.uname().sysname=='Darwin' else '-Wl,--gc-sections'
  # ESP-IDF permits free(heap_caps_malloc()); the tracking host allocator models that in these objects.
  objects=[]

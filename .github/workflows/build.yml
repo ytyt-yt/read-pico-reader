@@ -132,11 +132,9 @@ jobs:
         shell: bash
         run: |
           . "$IDF_PATH/export.sh"
-          extra=()
-          if [ "${{ matrix.board }}" = metalio47 ]; then extra=(--s31-pie --s31-text-ripple --s31-reader-panel37); fi
           python tools/build_firmware.py --board "${{ matrix.board }}" \
             --idf-${{ matrix.board }} "$IDF_PATH" --python "$(command -v python)" \
-            --output build/boards "${extra[@]}"
+            --output build/boards
           if [ "${{ matrix.board }}" = pico ]; then
             python tools/lowzag_host_test.py --component build/boards/pico/source/managed_components/defensiblelogic__lowzag
           fi
@@ -229,11 +227,15 @@ jobs:
           python3 tools/setup_navigation_host_test.py
           python3 tools/ui_locale_host_test.py
           python3 tools/reading_settings_host_test.py
+          python3 tools/reader_controls_runtime_host_test.py
           python3 tools/reader_controls_host_test.py
           python3 tools/reader_tap_dispatch_host_test.py
           python3 tools/reader_ui_scale_host_test.py
           python3 tools/reader_refresh_release_host_test.py
           python3 tools/reader_fullscreen_host_test.py
+          python3 tools/wallpaper_rotation_host_test.py
+          python3 tools/wallpaper_cache_host_test.py
+          bash tools/run_comics_host_tests.sh
           python3 tools/reader_overlay_host_test.py
           python3 tools/reader_immersive_space_host_test.py
           python3 tools/lock_screen_host_test.py

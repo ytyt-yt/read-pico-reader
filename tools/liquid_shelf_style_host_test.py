@@ -48,8 +48,8 @@ typedef struct {int type,x0,y0,x,y;} ui_gesture_event_t;
 #define EPD_DRAW_ALIGN_CENTER 1
 #define SETTINGS_SCROLL_MAX 1000
 static int s_page=SETTINGS_SHELF_STYLE,s_style_scroll,s_main_scroll,s_ble_scroll,viewport=1088,style=2;
-static bool s_scroll_drag_consumed,s_scroll_present_pending,s_main_wifi_saved;
-static char s_main_wifi[33];
+static bool s_scroll_drag_consumed,s_scroll_present_pending;
+
 static unsigned glass,acrylic,headers,footers,cards,titles;
 static int settings_viewport_end(void){return viewport;}
 static int settings_content_end(void){return viewport;}
@@ -97,13 +97,16 @@ for name in ('shelf_rows','row_rect','shelf_cover_image'):
 unit += catalog + '\n' + count + '\n' + function('draw_style_thumbnail', source) + '\n'
 unit += 'static void paint(uint8_t *fb){' + render + '}\n'
 unit += function('scroll_gesture', source) + '\n'
+unit += 'static app_redraw_t shelf_style_finish(void*ctx){(void)ctx;s_page=SETTINGS_MAIN;return APP_REDRAW_PAGE;}\n'
+unit += 'static char s_notice[128];static void *ctx;static struct{bool tracking;int origin_offset,origin_y;}s_list_drag;\n'
+unit += 'static bool settings_drag_gesture(void*c,const ui_gesture_event_t*e,int*o,int limit,app_redraw_t*r){(void)c;(void)e;(void)o;(void)limit;(void)r;return false;}\n'
 unit += 'static app_redraw_t scroll_event(const ui_gesture_event_t *ev){' + scroll + 'return APP_REDRAW_NONE;}\n'
 unit += 'static app_redraw_t tap(int x,int y){ui_gesture_event_t e={.type=UI_GESTURE_TAP,.x0=x,.y0=y};const ui_gesture_event_t *ev=&e;' + choose + 'return APP_REDRAW_NONE;}\n'
 unit += r'''
 int main(void){
  const int expected[]={1,2,6,5};uint8_t fb=0;
  for(unsigned choice=0;choice<4;++choice){
-  style=expected[choice];int rows=style==5?4:9;assert(shelf_rows()==rows);
+  style=expected[choice];int rows=style==5?8:9;assert(shelf_rows()==rows);
   for(int i=0;i<rows;++i){EpdRect hit=row_rect(i),cover=shelf_cover_image(i);
    assert(cover.x>=36&&cover.x+cover.width<=648&&cover.y>=184&&cover.y+cover.height<=972);
    assert(cover.x>=hit.x&&cover.x+cover.width<=hit.x+hit.width&&cover.y>=hit.y&&cover.y+cover.height<=hit.y+hit.height);
@@ -133,5 +136,5 @@ int main(void){
 with tempfile.TemporaryDirectory() as folder:
     path = Path(folder)
     (path / 'test.c').write_text(unit)
-    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-function','-fsanitize=address,undefined',str(path/'test.c'),'-o',str(path/'test')],check=True)
+    subprocess.run(['cc','-Dshelf_display_style=app_settings_shelf_style','-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-function','-fsanitize=address,undefined',str(path/'test.c'),'-o',str(path/'test')],check=True)
     subprocess.run([str(path/'test')],check=True)

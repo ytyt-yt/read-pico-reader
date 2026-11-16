@@ -60,7 +60,9 @@ bool book_progress_load(const char *path,uint32_t size,book_progress_t *out){
 }
 #include "book_comics.c"
 static bool book_title_from_path(const char *p,char *out,size_t cap){(void)p;(void)out;(void)cap;return false;}
-static bool book_auto_cover_render(const char*p,const char*t,const char*a,unsigned w,unsigned h,uint8_t*out){(void)p;(void)t;(void)a;memset(out,191,w*h);return true;}
+static uint64_t book_auto_cover_font_key(void){return 0;}
+static bool book_weread_cover_read(const char*p,uint8_t*out,unsigned w,unsigned h){(void)p;(void)out;(void)w;(void)h;return false;}
+static bool book_auto_cover_render(const char*t,const char*a,unsigned w,unsigned h,uint8_t*out){(void)t;(void)a;memset(out,191,w*h);return true;}
 bool book_cover_thumbnail(const uint8_t *p,size_t n,bool png,uint8_t out[BOOK_COVER_W * BOOK_COVER_H]){(void)png;assert(p&&n==1);memset(out,77,176*240);return true;}
 static esp_err_t book_cbz_cover_bounded(const char *p,uint8_t **out,size_t *size,bool *png,size_t budget){
     assert(strstr(p,".cbz")&&budget);++extractions;*out=malloc(1);**out=1;*size=1;*png=true;return ESP_OK;
@@ -77,12 +79,12 @@ for name in ("luminance", "scale_axis", "scale_map", "scale_next", "bilinear4", 
              "png_read_mem", "png_gray_rows"):
     unit += function(name, COVER) + "\n"
 unit += source[source.index("#define COVER_CACHE_MAGIC"):source.index("static uint64_t cover_hash")]
-for name in ("cover_hash", "book_cover_source_fingerprint", "prepared_comic_cover", "cover_cache_key",
+for name in ("cover_hash", "book_cover_source_fingerprint", "prepared_comic_cover", "cover_cache_identity", "cover_cache_key",
              "cover_cache_read", "cover_cache_write", "book_cover_load_gray_impl", "book_cover_load_gray"):
     unit += function(name, COVER) + "\n"
     if METALIO and name == "cover_cache_key":
         unit += function("ram_key", COVER) + "\n"
-unit += source[source.index("#define FAST_COVER_REVISION"):source.index("static uint64_t fast_cover_checksum")]
+unit += source[source.index("#define FAST_COVER_REVISION"):source.index("static uint64_t fast_cover_checksum", source.index("#define FAST_COVER_REVISION"))]
 for name in ("fast_cover_checksum", "fast_cover_key", "book_cover_fast_cache_read", "fast_cache_write", "book_cover_fast_cache_write"):
     unit += function(name, COVER) + "\n"
     if METALIO and name == "fast_cover_key":

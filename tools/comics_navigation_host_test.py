@@ -24,6 +24,7 @@ unit = r'''
 #define UI_GRAY_WHITE 255
 #define UI_GRAY_BLACK 0
 #define UI_GRAY_LIGHT 224
+#define UI_NAV_BACKGROUND_GRAY 0xe0
 #define UI_CLICK_NAV 2
 #define UI_NAV_TAB_ICON_PX 44
 #define APP_MAIN_REFRESH_NORMAL 0
@@ -32,7 +33,7 @@ typedef struct {int x,y,width,height;} EpdRect;
 typedef struct {int id;} app_desc_t;
 typedef struct {const app_desc_t *request_app;} app_ctx_t;
 typedef enum {UI_ICON_HOUSE,UI_ICON_LIBRARY_BIG,UI_ICON_BOOK_OPEN,UI_ICON_FOLDER_OPEN,UI_ICON_SLIDERS_HORIZONTAL} ui_icon_t;
-static const app_desc_t app_dashboard={0},app_book={1},app_files={2},app_device_settings={3},app_image={4},app_comics={5};
+static const app_desc_t app_dashboard={0},app_book={1},app_files={2},app_device_settings={3},app_image={4},app_comics={5},app_cloud_sync={6};
 static const char *const labels[]={"首页","书架","漫画","文件管理","设置"};
 static unsigned drawn,registered,texts,markers;
 static int mode,active,marker_center;

@@ -58,6 +58,10 @@ static bool s_reader_fullscreen=true;
 #define s_toolbar (s_reader_panel!=READER_PANEL_NONE)
 static int s_reader_panel=READER_PANEL_NONE,s_view=READING,s_comic_direction,s_water_turn_dir;
 static unsigned s_stats_pending_turns,s_session_turns,s_turns,s_unsaved;
+static bool s_rc_auto_turning;
+static void rc_pause_auto(void){}
+static void ticket_count_turn(void){++s_stats_pending_turns;++s_session_turns;}
+static void app_book_ticket_sample(int64_t t,bool visible){(void)t;(void)visible;}
 static int64_t s_last_turn_ms,s_stats_activity_ms;
 static unsigned saves,pauses,closes,opens;
 static int source_kind=BOOK_KIND_CBZ,returned_page,bad_index=-1;

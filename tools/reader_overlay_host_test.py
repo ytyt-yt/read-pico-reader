@@ -18,12 +18,18 @@ unit = r'''
 #include "ui_reader_layout.h"
 #define UI_LOCK_WIDTH 684
 #define UI_LOCK_HEIGHT 1216
+#define UI_GRAY_BLACK 0
 #define UI_GRAY_WHITE 255
+#define UI_NAV_BACKGROUND_GRAY 0xe0
 #define UI_GRAY_LIGHT 192
+#define READER_TOOL_ICON_PX 40
+#define UI_CLICK_BACK_SMALL 77
+#define UI_ICON_ANIMATE_CIRCLE_CHEVRON_LEFT 78
 #define EPD_DRAW_ALIGN_CENTER 0
 #define EPD_DRAW_ALIGN_LEFT 1
-#define UI_ICON_ANIMATE_BOOKMARK_PLUS 1
-#define UI_ICON_BOOKMARK 2
+#define UI_ICON_BOOK_BOOKMARK 1
+#define UI_ICON_BOOK 2
+#define UI_ICON_EXPAND 3
 #define READER_IMAGE_ZOOM_MIN 1000
 #define MODE_GL16 1
 #define TAG "overlay"
@@ -49,9 +55,10 @@ static void ui_fill_rect_fast(EpdRect r,uint8_t color,uint8_t *fb){
 static void ui_text_set_system_scale(bool enabled){(void)enabled;}
 static void ui_clear_page(uint8_t *fb){memset(fb,255,684*1216);}
 static void ui_nav_status(uint8_t *fb){fb[40*684+342]=0;}
-static void ui_nav_back(uint8_t *fb,int x,int y){fb[y*684+x]=0;}
+static void ui_click_feedback_register(uint8_t *fb,EpdRect r,int kind,int icon){(void)fb;(void)r;(void)kind;(void)icon;}
 static void copy_text(char *to,size_t cap,const char *from){snprintf(to,cap,"%s",from);}
 static int ui_text_title_fit(char *text,int px,int width,const char *sample){(void)text;(void)width;(void)sample;return px;}
+static int ui_text_title_width_px(int px,const char*t,const char*s){(void)px;(void)t;(void)s;return 24;}
 static void ui_text_title_vc(uint8_t *fb,int x,int y,int px,const char *text,const char *sample,int align){(void)px;(void)text;(void)sample;(void)align;fb[y*684+x]=0;}
 static void ui_draw_icon(uint8_t *fb,int x,int y,int px,int icon,int gray){(void)px;(void)icon;(void)gray;fb[y*684+x]=0;}
 static void ui_hairline(uint8_t *fb,int y,int x,int width,int gray){ui_fill_rect_fast((EpdRect){x,y,width,1},gray,fb);}
@@ -62,7 +69,7 @@ static void draw_reader_images(uint8_t *fb,size_t page,EpdRect r){(void)page;ui_
 static char note_text[601];static const char *s_text=note_text;static size_t s_text_len=600,s_note_count=1;
 static int s_footnote_note=-1;static EpdRect s_footnote_marker,note_card;
 typedef struct{size_t text_start,text_len;char *owned_text;} html_note_t;
-static html_note_t note={.text_len=600},*s_notes=&note;
+static html_note_t note={.text_start=0,.text_len=600},*s_notes=&note;
 static int note_lines,note_x[24],note_y[24];
 static int ttf_text_width_px(int px,const char *text){(void)text;return px/2;}
 static int ttf_ascender_px(int px){return px*3/4;}
@@ -86,6 +93,7 @@ typedef struct {uint8_t *gray;int width,height;} reader_image_t;
 static const reader_image_t *reader_zoom_image(void);
 static void book_layout_draw_page(uint8_t *fb,size_t page,EpdRect r,int px){(void)page;(void)px;ui_fill_rect_fast(r,17,fb);}
 '''
+unit += 'static void ui_draw_round_rect(uint8_t*fb,EpdRect r,int radius,int color){(void)fb;(void)r;(void)radius;(void)color;}\n'
 for name in ('reader_area', 'body_rect_for_tracking', 'body_rect', 'draw_reader_header', 'draw_reader_footnote_card', 'draw_reader_outer', 'draw_reader'):
     unit += function(name, book) + '\n'
 unit += r'''
@@ -118,8 +126,9 @@ int main(void){
   draw_reader(fb,s_page);memcpy(original,fb,sizeof(fb));EpdRect body=body_rect();
   s_reader_fullscreen=false;draw_reader(fb,s_page);memcpy(standard,fb,sizeof(fb));
   assert(body_rect().y==body.y&&body_rect().height==body.height);
-  assert(fb[100*684+300]==255&&fb[40*684+342]==0&&fb[114*684+620]==0);
+  assert(fb[100*684+300]==UI_NAV_BACKGROUND_GRAY&&fb[40*684+342]==0&&fb[114*684+620]==0);
   assert(fb[1060*684+300]==238&&fb[1150*684+300]==204);
+  for(int y=152;y<176;++y)for(int x=0;x<684;++x)assert(fb[y*684+x]==UI_GRAY_WHITE);
   assert(!memcmp(fb+176*684,original+176*684,872*684));
   s_reader_panel=READER_PANEL_SETTINGS;draw_reader(fb,s_page);
   assert(!memcmp(fb+176*684,original+176*684,(580-176)*684)&&fb[700*684+300]==221);
@@ -159,6 +168,6 @@ with tempfile.TemporaryDirectory(prefix='reader-overlay-') as temporary:
     p = Path(temporary)
     (p / 'epdiy.h').write_text('#pragma once\ntypedef struct{int x,y,width,height;}EpdRect;\n')
     (p / 'test.c').write_text(unit)
-    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',
+    subprocess.run(['cc','-std=c11','-D_DEFAULT_SOURCE','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',
                     '-I'+str(p),'-I'+str(root/'main/ui'),str(p/'test.c'),'-o',str(p/'test')],check=True)
     subprocess.run([str(p/'test')],check=True)

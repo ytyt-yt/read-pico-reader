@@ -13,7 +13,7 @@ a=s.index('\n',s.index('if(header_handled)return header_redraw;'))+1
 b=s.index('\n    if (s_view == SHELF) {',a)
 block=s[a:b]
 a=s.index('        int tap = book_reader_tap_tick(')
-b=s.index('\n    }\n    track_ticket_stats(ctx);',a)
+b=s.index('\n    }',a)
 tick=s[a:b]
 header=(R/'main/book/book_reader_input.h').read_text()
 header='\n'.join(x for x in header.splitlines() if not x.startswith(('#include','#pragma')))
@@ -49,6 +49,7 @@ static bool reader_zoom_mode(void){return image_present&&(single_image||s_zoom_a
 static int reader_image_slots(size_t p){(void)p;return image_present?1:0;}
 static bool app_settings_reader_vertical_turn(void){return vertical;}
 static bool app_settings_book_vertical(void){return rtl;}
+static app_redraw_t rc_body_tap(app_ctx_t*c,int x,int y,bool image,bool*handled){(void)c;(void)x;(void)y;(void)image;*handled=false;return APP_REDRAW_NONE;}
 '''+function('reader_zoom_reset',book)+r'''
 static int toggle_reader_fullscreen(app_ctx_t*c){(void)c;++fullscreen_calls;s_reader_fullscreen=!s_reader_fullscreen;s_toolbar=!s_reader_fullscreen;s_reader_panel=s_toolbar?READER_PANEL_TOOLS:READER_PANEL_NONE;s_reader_tap.pending=false;return APP_REDRAW_FULL;}
 static int reader_panel_action(app_ctx_t*c,int x,int y){(void)c;(void)x;(void)y;++panel_calls;return APP_REDRAW_PAGE;}

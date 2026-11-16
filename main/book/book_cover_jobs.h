@@ -11,6 +11,7 @@ typedef struct {
     bool list,fast,natural;
     // Reader idle preparation must never render placeholder glyphs with the reading face.
     bool artwork_only;
+    bool metadata_only,with_chapters; ///< 当前页元数据/相邻页预热 / Visible metadata or neighbor warming
     unsigned width,height,stride,contrast,phase;
     int x,y;
 } book_cover_job_t;
@@ -18,6 +19,9 @@ typedef struct {
     uint8_t *pixels;
     unsigned width,height;
     bool fast,white_edge;
+    /// 由标题生成的默认封面 / A default cover generated from the title.
+    bool generated;
+    bool metadata;uint16_t chapters; ///< 来源校验后的章节数 / Source-validated chapter total
     off_t size;
     int64_t modified;
     /// 预制漫画封面与归档的联合指纹。/ Combined fingerprint of prepared comic covers and archives.
@@ -28,13 +32,19 @@ unsigned book_cover_jobs_begin(void);
 bool book_cover_jobs_submit(unsigned generation,unsigned slot,const book_cover_job_t *request);
 /// 0待处理，1完成并转交像素所有权，-1失败；无封面时仅在UI生成字形。
 /// 0 pending,1 transfers pixels,-1 failed; missing artwork renders its glyphs only on the UI thread.
+/// A readable book has no embedded artwork, so keep its title card.
+enum { BOOK_COVER_JOB_NO_ARTWORK = -2 };
 int book_cover_jobs_take(unsigned generation,unsigned slot,book_cover_result_t *result);
 /// 后台复查已收取槽位的来源：0排队/等待，1返回指纹，-1不可用；不执行UI文件访问。
 /// Recheck a consumed slot in the worker: 0 queues/waits, 1 returns its fingerprint, -1 unavailable; no UI file IO.
 int book_cover_jobs_recheck(unsigned generation,unsigned slot,uint64_t *fingerprint);
+/// Collect finished work without rendering automatic covers on the caller.
+int book_cover_jobs_take_ready(unsigned generation, unsigned slot, book_cover_result_t *result);
 void book_cover_jobs_cancel(unsigned generation);
 /// 仅卸载/睡眠前收齐文件句柄，导航不等待。/ Join handles only before unmount/sleep; navigation never waits.
 bool book_cover_jobs_quiesce(unsigned timeout_ms);
 
 /// 低优先级单槽壁纸预热；与封面一起取消/汇合，忙时由空闲循环重试。/ One low-priority wallpaper slot, cancelled/joined with covers; idle retries while busy.
 bool book_cover_jobs_prefetch_wallpaper(const char *path);
+/// 仅在没有待接收/运行作业时让后台预热借用队列。/ Background warming may borrow only an empty/quiescent queue.
+bool book_cover_jobs_idle(void);

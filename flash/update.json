@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "version": "0.3.3-rc105",
+  "version": "0.3.3-rc108",
   "project": "Read_Pico",
   "board": "RDP-G01-W",
   "layout": "pico-dual-4m-v1",
   "minimum_base_version": "0.3.3-rc72",
-  "url": "https://wegooo-cell.github.io/read-pico-reader/Pico-update-0.3.3-rc105.bin",
-  "size": 4141360,
-  "sha256": "0759b4c162bdbbe9634ba0a4969ed8ed619fcbc96db37bdd477822390a4e9d4f",
-  "notes": "1. 内建字体扩至7668字符，优化正文缺字和灰阶粗细\n2. 新增默认全屏、阅读线范围开关\n3. 优化锁屏唤醒字体、传书速度和首次书架加载\n4. 修复全屏点击、工具栏和书架分页\n保留设置，可回退rc104。"
+  "url": "https://wegooo-cell.github.io/read-pico-reader/Pico-update-0.3.3-rc108.bin",
+  "size": 4171440,
+  "sha256": "61b60317be5c15ddb650ca19266cad281d61607f0d6aa111e7cd333395b8710e",
+  "notes": "书架提前加载，封面整页显示，切页和开书可打断。\nTXT 封面支持 Z-Library 和手选小图，保存到 TF 卡。\n票根校准章节和阅读时长，修复 TXT 导入和异常续读。\n页码局部刷新，继续阅读去掉浅灰背景。"
 }

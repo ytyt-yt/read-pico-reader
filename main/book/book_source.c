@@ -2,8 +2,8 @@
  * SPDX-License-Identifier: Apache-2.0
  * 中文：TXT、EPUB 与 CBZ 单实例书源分派，不依赖界面。
  * English: Singleton TXT, EPUB and CBZ source dispatch without UI dependencies.
- * 冻结：TXT 保留源字节偏移，EPUB 采用累计 spine HTML 字节；兼容纯文本加载，不写文件。
- * Frozen: TXT retains source offsets; EPUB uses cumulative spine HTML bytes; retain plain-text loading and never write files.
+ * 冻结：TXT 保留源字节偏移，EPUB 采用累计 spine HTML 字节；兼容纯文本加载；只允许写来源校验的派生章节摘要，不改原书或进度。
+ * Frozen: TXT retains source offsets; EPUB uses cumulative spine HTML bytes; retain plain-text loading; only source-validated derived chapter summaries may be written, never books or progress.
  * 用户要求增加 CBZ 漫画：每图一章，进度按页数换算，不改变旧书进度单位。
  * User requests CBZ comics: one image per chapter, page-based progress, retaining existing book units.
  */
@@ -13,6 +13,8 @@
 #if KIIKO_BOARD_METALIO47
 #include "book_comic_cache.h"
 #endif
+#include "book_index_cache.h"
+#include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -29,6 +31,40 @@ static struct stat s_io_stat;
 #else
 #endif
 static book_cbz_t *s_cbz;
+
+// 后台缓存以TF等待为主，按体积优化以保留Pico原4MiB应用分区。
+// Background cache work is IO-bound; size optimization preserves Pico's original 4MiB app slots.
+#if defined(ESP_PLATFORM) && defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize ("Os")
+#endif
+// 小型章节摘要独立于进度；来源身份变化时自动失效，失败不影响阅读。
+// Tiny chapter summaries are independent of progress; source identity changes invalidate them without affecting reading.
+static void chapter_summary_save(const char *path,uint32_t size,int64_t modified,uint16_t count) {
+    if(!count)return;
+    char cache[112],temp[120];book_index_cache_header_t key;
+    if(!book_index_cache_prepare_file(path,"chapters",1,size,modified,cache,sizeof(cache),&key))return;
+    uint32_t payload[]={count,(uint32_t)count^UINT32_C(0x73524331)};
+    FILE *f=book_index_cache_open_write(cache,&key,temp,sizeof(temp));if(!f)return;
+    (void)book_index_cache_finish_write(f,temp,cache,fwrite(payload,1,sizeof(payload),f)==sizeof(payload));
+}
+static uint16_t chapter_summary_read(const char *path,uint32_t size,int64_t modified) {
+    char cache[112];book_index_cache_header_t key;
+    if(!book_index_cache_prepare_file(path,"chapters",1,size,modified,cache,sizeof(cache),&key))return 0;
+    FILE *f=book_index_cache_open_read(cache,&key);if(!f)return 0;
+    uint32_t p[2];bool ok=fread(p,1,sizeof(p),f)==sizeof(p)&&p[0]&&p[0]<=UINT16_MAX&&
+        p[1]==(p[0]^UINT32_C(0x73524331))&&fgetc(f)==EOF&&!ferror(f);
+    fclose(f);return ok?(uint16_t)p[0]:0;
+}
+static void chapter_summary_opened(const char *path) {
+    struct stat st;size_t count=book_chapter_count();
+    if(count&&count<=UINT16_MAX&&!stat(path,&st)&&S_ISREG(st.st_mode)&&st.st_size>=0&&(uint64_t)st.st_size<=UINT32_MAX)
+        chapter_summary_save(path,(uint32_t)st.st_size,(int64_t)st.st_mtime,(uint16_t)count);
+}
+#if defined(ESP_PLATFORM) && defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
+
 esp_err_t book_open(const char *path) {
     book_close();
 #if KIIKO_BOARD_METALIO47
@@ -38,11 +74,16 @@ esp_err_t book_open(const char *path) {
     if (!path || !*path) return ESP_ERR_INVALID_ARG;
 #endif
     const char *ext = strrchr(path, '.');
-    if (ext && !strcasecmp(ext, ".epub")) return book_epub_open(path, &s_epub);
-    if (ext && !strcasecmp(ext, ".cbz")) return book_cbz_open(path, &s_cbz);
+    if (ext && !strcasecmp(ext, ".epub")) {
+        esp_err_t err=book_epub_open(path,&s_epub);if(err==ESP_OK)chapter_summary_opened(path);return err;
+    }
+    if (ext && !strcasecmp(ext, ".cbz")) {
+        esp_err_t err=book_cbz_open(path,&s_cbz);if(err==ESP_OK)chapter_summary_opened(path);return err;
+    }
     if (!ext || strcasecmp(ext, ".txt")) return ESP_ERR_NOT_SUPPORTED;
     esp_err_t err = book_txt_open(&s_book, path);
     if (err != ESP_OK) book_close();
+    else chapter_summary_opened(path);
     return err;
 }
 void book_close(void) {
@@ -201,3 +242,13 @@ esp_err_t book_resume_io(void) {
 bool book_io_pending(void) { return s_io_suspended || s_epub != NULL || s_cbz != NULL; }
 #else
 #endif
+
+uint16_t book_cached_chapter_count(const char *path,uint32_t size,int64_t modified) {
+    if(!path)return 0;
+    uint16_t count=chapter_summary_read(path,size,modified);if(count)return count;
+    const char *ext=strrchr(path,'.');
+    if(ext&&!strcasecmp(ext,".epub"))count=book_epub_cached_chapter_count(path,size,modified);
+    else if(ext&&!strcasecmp(ext,".txt"))count=book_txt_cached_chapter_count(path,size,modified);
+    if(count)chapter_summary_save(path,size,modified,count);
+    return count;
+}

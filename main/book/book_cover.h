@@ -46,6 +46,12 @@ bool book_image_file_grayscale(const char *path, bool png, unsigned width, unsig
 bool book_image_file_grayscale_active(const char *path, bool png, unsigned width, unsigned height,
                                       uint8_t *out, bool (*active)(void));
 
+/// 星瞳云壁纸使用的 XTH：22 字节头 + 双位平面、列主序 4 级灰阶。
+/// Xteink cloud wallpapers use XTH: a 22-byte header plus column-major dual bit-planes,
+/// four gray levels (0 white, 1 dark gray, 2 light gray, 3 black).
+bool book_image_xth_dimensions(const char *path, unsigned *width, unsigned *height);
+bool book_image_file_xth_grayscale(const char *path, unsigned width, unsigned height, uint8_t *out);
+
 bool book_jpeg_frame(const uint8_t *data, size_t size, uint8_t *sof, unsigned *width, unsigned *height);
 
 /// 是否是 WebP（RIFF....WEBP）。/ Whether the bytes are WebP (RIFF....WEBP).
@@ -96,6 +102,17 @@ void book_cover_store_generated(const char *path,const char *title,const char *a
 /// Persist asynchronous pixels only under their original source identity, never a replaced book's key.
 void book_cover_fast_cache_write_checked(const char *path,const char *title,const char *author,book_fast_cover_key_t key,const uint8_t *pixels,bool edge,int64_t size,int64_t modified);
 
+#include "metalio_cover_cache.h"
+/// 用书架已知的文件身份读取成品，不访问存储。/ Read finished rasters using the catalog identity, with no storage I/O.
+bool book_cover_shelf_ram_read(const char *path, const char *title, const char *author,
+        uint64_t size, int64_t modified, bool list, bool fast, book_fast_cover_key_t raster,
+        void *out, size_t capacity, metalio_cover_meta_t *meta);
+/// TXT 生成封面存于有界 RAM。/ Store generated TXT covers in the bounded RAM cache.
+void book_cover_shelf_ram_store(const char *path, const char *title, const char *author,
+        uint64_t size, int64_t modified, uint64_t font_key, bool list, bool fast, book_fast_cover_key_t raster,
+        const uint8_t *pixels, bool white_edge);
+bool book_cover_shelf_no_artwork(const char *path, const char *title, const char *author,
+        uint64_t size, int64_t modified, bool remember);
 #if KIIKO_BOARD_METALIO47
 /// RAM 专用命中；前台未命中时不打开 TF 缓存文件。/ RAM-only lookup; no TF open on foreground misses.
 bool book_cover_peek_gray(const char *path,const char *title,const char *author,bool list,
@@ -112,3 +129,10 @@ bool book_png_file_layer(const char *path,unsigned width,unsigned height,uint8_t
 /// 流式透明层：仅保留源行窗口和一条输出行。/ Stream premultiplied gray/alpha through bounded row buffers.
 bool book_png_file_layer_rows(const char *path, unsigned width, unsigned height,
     bool (*sink)(void *, unsigned, unsigned, const uint8_t *, const uint8_t *), void *context);
+
+/// 列表专用最终尺寸缓存；与完整原比例封面隔离，IO阶段不调用字库。
+/// List-only final-size caches, isolated from uncropped covers; IO never calls fonts.
+int book_cover_load_sized_io(const char *path,const char *title,const char *author,uint8_t *out,
+                            unsigned width,unsigned height,bool *auto_cache);
+void book_cover_store_sized(const char *path,const char *title,const char *author,const uint8_t *pixels,
+                            unsigned width,unsigned height,int64_t size,int64_t modified);

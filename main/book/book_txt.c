@@ -15,7 +15,7 @@
 #include <strings.h>
 #include <ctype.h>
 #include <limits.h>
-#define READ_BLOCK (64 * 1024)
+#define READ_BLOCK (BOOK_TXT_PROBE_BYTES - 3u)
 #define PART_TARGET (48 * 1024)
 // 两板缓存只重建定位表，不迁移原进度、书签或TXT。/ Rebuild locations on both boards without migrating progress, bookmarks or source TXT.
 #define TXT_CACHE_VERSION 5u
@@ -107,6 +107,17 @@ static uint8_t utf16_probe(const unsigned char *s,size_t n) {
     for(size_t i=0;i+1<n;){uint32_t cp;size_t k=utf16_one(s+i,n-i,result==2,&cp);
         errors+=cp==0xfffd&&utf16_unit(s+i,result==2)!=0xfffd;++scalars;i+=k;}
     return errors*100>scalars?0:result;
+}
+
+uint8_t book_txt_detect_utf16(const unsigned char *sample, size_t length, uint32_t *bom) {
+    *bom = 0;
+    if (length >= 2 &&
+        ((sample[0] == 0xff && sample[1] == 0xfe) || (sample[0] == 0xfe && sample[1] == 0xff))) {
+        *bom = 2;
+        return sample[0] == 0xff ? 1 : 2;
+    }
+    if (length >= 3 && !memcmp(sample, "\xef\xbb\xbf", 3)) return 0;
+    return utf16_probe(sample, length);
 }
 #endif
 static bool next(reader_t *r, uint32_t *cp) {
@@ -506,7 +517,7 @@ size_t book_txt_nav_position(const book_txt_t *b,size_t chapter,size_t text_offs
     if(!b->mapped || chapter!=b->mapped_chapter || !b->nav_count)return SIZE_MAX;
     size_t lo=b->mapped_begin,hi=b->mapped_end;
     while(lo<hi){size_t mid=lo+(hi-lo)/2;if(nav_at(b,mid)->text_offset<=text_offset)lo=mid+1;else hi=mid;}
-    return lo?lo-1:0;
+    return lo ? lo - 1 : SIZE_MAX;
 }
 static size_t title_scalar(const book_txt_t *b,const unsigned char *s,size_t n,uint32_t *cp) {
 #if KIIKO_BOARD_METALIO47
@@ -697,6 +708,32 @@ static bool txt_cache_load(const char *source,book_txt_t *b) {
 #endif
     return true;
 }
+
+// 只读已存在的索引并校验完整载荷，不扫描TXT、不分配目录、不改当前书源。
+// Validate an existing index payload without scanning TXT, allocating a TOC or changing the open source.
+uint16_t book_txt_cached_chapter_count(const char *source,uint32_t size,int64_t modified) {
+    char path[112];book_index_cache_header_t key;
+    if(!book_index_cache_prepare_file(source,"txt",TXT_CACHE_VERSION,size,modified,path,sizeof(path),&key))return 0;
+    FILE *cache=book_index_cache_open_read(path,&key);if(!cache)return 0;
+    txt_cache_payload_t p={0};
+    bool ok=fread(&p,1,sizeof(p),cache)==sizeof(p)&&p.total==size&&p.bom<=3&&p.bom<=size&&
+        p.count&&p.count<=BOOK_CHAPTER_MAX&&p.nav_count<=TXT_NAV_MAX&&p.gbk<=1;
+    unsigned volumes=p.reserved[1]|((unsigned)p.reserved[2]<<8);
+    ok=ok&&volumes<=TXT_VOLUME_MAX&&(!volumes||p.nav_count);
+#if KIIKO_BOARD_METALIO47
+    ok=ok&&p.reserved[0]<=2&&(!p.reserved[0]||(!p.gbk&&(p.bom==0||p.bom==2)));
+#else
+    ok=ok&&!p.reserved[0];
+#endif
+    uint32_t expected=p.checksum;p.checksum=0;
+    uint32_t hash=index_hash(UINT32_C(2166136261),&p,sizeof(p));
+    size_t remaining=ok?p.count*sizeof(book_entry_t)+p.nav_count*sizeof(txt_nav_t)+volumes*sizeof(book_txt_volume_t):0;
+    unsigned char bytes[256];
+    while(ok&&remaining){size_t n=remaining<sizeof(bytes)?remaining:sizeof(bytes);ok=fread(bytes,1,n,cache)==n;if(ok){hash=index_hash(hash,bytes,n);remaining-=n;}}
+    ok=ok&&hash==expected&&fgetc(cache)==EOF&&!ferror(cache);
+    fclose(cache);return ok?(uint16_t)p.count:0;
+}
+
 static void txt_cache_save(const char *source,const book_txt_t *b) {
     if(b->nav_incomplete||b->volumes_incomplete)return;
     char path[112],temp[120];book_index_cache_header_t key;
@@ -742,13 +779,9 @@ esp_err_t book_txt_open(book_txt_t *b, const char *path) {
         size_t n = fread(r->bytes, 1, READ_BLOCK + 3, b->file);
         if (ferror(b->file)) err = ESP_FAIL;
 #if KIIKO_BOARD_METALIO47
-        else if(n>=2&&r->bytes[0]==0xff&&r->bytes[1]==0xfe){b->utf16=1;b->bom=2;}
-        else if(n>=2&&r->bytes[0]==0xfe&&r->bytes[1]==0xff){b->utf16=2;b->bom=2;}
+        else if ((b->utf16 = book_txt_detect_utf16(r->bytes, n, &b->bom)) != 0) {}
 #endif
         else if (n >= 3 && !memcmp(r->bytes, "\xef\xbb\xbf", 3)) b->bom = 3;
-#if KIIKO_BOARD_METALIO47
-        else if((b->utf16=utf16_probe(r->bytes,n))!=0){}
-#endif
         else for (size_t i = 0; i < n && i < READ_BLOCK;) {
             uint32_t cp; size_t k = utf8_one(r->bytes + i, n - i, &cp);
             if (k == 1 && r->bytes[i] >= 0x80) { b->gbk = true; break; } i += k;

@@ -41,7 +41,7 @@ set(main_requires
     esp_driver_usb_serial_jtag
     esp_app_format
     app_update
-    esp_http_client
+    esp_http_client esp-tls
     mbedtls
     espressif__cjson
 )
@@ -106,12 +106,15 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
         "apps/app_device_settings.c"
         "apps/app_image.c"
         "apps/app_transfer.c"
+        "apps/app_cloud_sync.c"
         "apps/usb_storage.c"
         "book/book_store.c"
         "book/book_comics.c"
+        "book/book_xteink_sync.c"
         "book/book_progress.c"
         "book/book_history_backup.c"
         "book/book_title.c"
+        "book/book_weread_cover.c"
         "book/book_added.c"
         "book/book_ticket.c"
         "book/book_excerpt.c"
@@ -127,6 +130,7 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
         "book/book_cover.c"
         "book/metalio_jpeg.c"
         "book/book_cover_jobs.c"
+        "book/book_shelf_page_cache.c"
         "book/metalio_cover_cache.c"
         "book/reader_page_cache.c"
         "book/book_image_header.c"
@@ -241,7 +245,7 @@ set(main_requires
     esp_driver_usb_serial_jtag
     esp_app_format
     app_update
-    esp_http_client
+    esp_http_client esp-tls
     mbedtls
     espressif__cjson
 )
@@ -302,12 +306,15 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
         "apps/app_device_settings.c"
         "apps/app_image.c"
         "apps/app_transfer.c"
+        "apps/app_cloud_sync.c"
         "apps/usb_storage.c"
         "book/book_store.c"
         "book/book_comics.c"
+        "book/book_xteink_sync.c"
         "book/book_progress.c"
         "book/book_history_backup.c"
         "book/book_title.c"
+        "book/book_weread_cover.c"
         "book/book_added.c"
         "book/book_ticket.c"
         "book/book_excerpt.c"
@@ -322,6 +329,8 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
         "book/book_webp.c"
         "book/book_cover.c"
         "book/book_cover_jobs.c"
+        "book/book_shelf_page_cache.c"
+        "book/metalio_cover_cache.c"
         "book/book_image_header.c"
         "book/book_cover_auto.c"
         "book/zip_reader.c"
@@ -371,3 +380,18 @@ if(NOT KIIKO_BOARD_METALIO47)
 endif()
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE KIIKO_UI_LOCALIZATION=1)
+
+# 冷路径按体积编译，为双板共用的新功能保留Pico原4MiB升级槽；阅读和解码热路径保持原优化。
+# Size-optimize cold paths to keep shared additions within Pico's original4MiB slots;
+# retain the existing optimization for reader and decoder hot paths.
+if(NOT KIIKO_BOARD_METALIO47)
+    set_source_files_properties(
+        "apps/app_comics.c" "apps/app_cloud_sync.c" "book/book_comics.c"
+        "book/book_xteink_sync.c" "book/book_weread_cover.c" "wallpaper_rotation.c"
+        PROPERTIES COMPILE_OPTIONS "-Os")
+    foreach(source IN LISTS kiiko_selected_sources)
+        if(source MATCHES "/apps/(app_book|app_device_settings|app_files|app_dashboard)\\.c$")
+            set_source_files_properties("${source}" PROPERTIES COMPILE_OPTIONS "-Os")
+        endif()
+    endforeach()
+endif()

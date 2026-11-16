@@ -49,6 +49,8 @@ static int test_stat(const char *path,struct stat *out){
 }
 #define stat(path,out) test_stat(path,out)
 static void *heap_caps_malloc(size_t n,int caps){assert(caps==3&&n<=684u*1216u);return alloc_fail?NULL:malloc(n);}
+static bool book_image_xth_dimensions(const char*p,unsigned*w,unsigned*h){(void)p;(void)w;(void)h;assert(false);return false;}
+static bool book_image_file_xth_grayscale(const char*p,unsigned w,unsigned h,uint8_t*out){(void)p;(void)w;(void)h;(void)out;assert(false);return false;}
 static bool book_image_file_dimensions(const char *path,bool png,unsigned *w,unsigned *h){(void)path;(void)png;*w=source_w;*h=source_h;return true;}
 static bool book_image_file_grayscale(const char *path,bool png,unsigned w,unsigned h,uint8_t *out){
  (void)path;(void)png;++loads;if(decode_fail)return false;

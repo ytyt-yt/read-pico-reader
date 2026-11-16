@@ -266,14 +266,20 @@ typedef struct {
     glyph_entry_t* f_lru_head;
     glyph_entry_t* f_lru_tail;
     size_t f_cache_bytes;
-#if KIIKO_BOARD_METALIO47
-    bool f_preview;        ///< 临时名称预览不映射整份 glyf/gvar / transient names never map full outline tables
-#else
-#endif
+    bool f_preview;        ///< 临时字体不映射整份轮廓 / transient faces do not map full outlines
     bool f_used;           ///< 槽位已被占用 / the slot is in use
 } ttf_slot_t;
 
-static ttf_slot_t s_slots[TTF_FONT_SLOTS];
+// 用户2026-11-11：字体槽元数据（约9KB）挪到外置PSRAM，把稀缺的内部RAM留给WiFi/BLE射频
+// 路径；同时保持固件内所有既有槽位、缓存与线程游标语义不变。
+// User2026-11-11: move the font-slot metadata (~9 KB) to external PSRAM so the scarce internal
+// RAM stays available for the WiFi/BLE radio paths; slot/cursor/cache semantics are unchanged.
+#if defined(ESP_PLATFORM)
+#define TTF_SLOTS_ATTR __attribute__((section(".ext_ram.bss")))
+#else
+#define TTF_SLOTS_ATTR
+#endif
+static ttf_slot_t s_slots[TTF_FONT_SLOTS] TTF_SLOTS_ATTR;
 #if KIIKO_BOARD_METALIO47
 // 只有独立装载游标按线程保存；现有渲染游标和绘制锁契约不变。
 // Only the detached loader cursor is thread-local; retain the existing render cursor/lock contract.
@@ -2051,7 +2057,16 @@ static int reader_missing_advance(uint32_t cp,int px) {
     return -1;
 }
 static uint8_t s_cover[256];
+static float s_cover_gamma = TTF_COVER_GAMMA;
+static bool s_cover_ready;
 static void ttf_cover_lut_init(void);
+static void ttf_cover_lut_rebuild(void);
+#if KIIKO_BOARD_METALIO47
+// 用户2026-11-12：调试页实机标定后的默认值；改动需重新实测并更新这里与调试页读数。
+// User2026-11-12: defaults tuned on hardware via the debug page; re-measure before changing.
+int g_hanzi_aa_edge_bias = TTF_AA_SUPPLEMENT_EDGE_BIAS;
+int g_hanzi_aa_ink_percent = TTF_AA_SUPPLEMENT_INK_PERCENT;
+#endif
 static glyph_entry_t* rasterize_glyph(uint32_t codepoint, int pixel_height) {
     int gid = stbtt_FindGlyphIndex(&font_info, (int)codepoint);
     const stbtt_fontinfo *raster_font=&font_info;
@@ -2376,6 +2391,54 @@ void ttf_font_cache_clear(void) {
     io_reset();
 }
 
+#if KIIKO_BOARD_METALIO47
+/* ---- 抗锯齿调试微调 / AA debug tuning ---- */
+
+void ttf_aa_tune_set_cover_gamma(float gamma) {
+    if (gamma < 0.20f) gamma = 0.20f;
+    if (gamma > 1.60f) gamma = 1.60f;
+    s_cover_gamma = gamma;
+    // 覆盖率 LUT 在绘制期应用，字形位图不变，无需清缓存。
+    // The coverage LUT is applied at draw time; glyph bitmaps stay valid, so no cache clear.
+    ttf_cover_lut_rebuild();
+    ESP_LOGI("ttf_aa", "cover_gamma=%.3f", (double)s_cover_gamma);
+}
+
+float ttf_aa_tune_get_cover_gamma(void) { return s_cover_gamma; }
+
+void ttf_aa_tune_set_edge_bias(int bias) {
+    if (bias < -4096) bias = -4096;
+    if (bias > 4096) bias = 4096;
+    g_hanzi_aa_edge_bias = bias;
+    // 补字在栅格化时应用灰边映射，必须重新生成字形位图。
+    // Supplements bake the edge mapping at raster time, so rebuild their bitmaps.
+    ttf_font_cache_clear();
+    ESP_LOGI("ttf_aa", "edge_bias=%d", g_hanzi_aa_edge_bias);
+}
+
+int ttf_aa_tune_get_edge_bias(void) { return g_hanzi_aa_edge_bias; }
+
+void ttf_aa_tune_set_ink_percent(int percent) {
+    if (percent < 60) percent = 60;
+    if (percent > 140) percent = 140;
+    g_hanzi_aa_ink_percent = percent;
+    ttf_font_cache_clear();
+    ESP_LOGI("ttf_aa", "ink_percent=%d", g_hanzi_aa_ink_percent);
+}
+
+int ttf_aa_tune_get_ink_percent(void) { return g_hanzi_aa_ink_percent; }
+
+void ttf_aa_tune_reset(void) {
+    s_cover_gamma = TTF_COVER_GAMMA;
+    g_hanzi_aa_edge_bias = TTF_AA_SUPPLEMENT_EDGE_BIAS;
+    g_hanzi_aa_ink_percent = TTF_AA_SUPPLEMENT_INK_PERCENT;
+    ttf_cover_lut_rebuild();
+    ttf_font_cache_clear();
+    ESP_LOGI("ttf_aa", "reset gamma=%.3f bias=%d ink=%d", (double)s_cover_gamma,
+             g_hanzi_aa_edge_bias, g_hanzi_aa_ink_percent);
+}
+#endif
+
 void ttf_bench_begin(void) {
     memset(&bench, 0, sizeof(bench));
     bench_on = true;
@@ -2462,22 +2525,14 @@ static esp_err_t load_opened_font(void) {
 
     // CFF 没有 glyf 表，长度为零，不必去映射。
     // A CFF face has no glyf table; its length is zero and there is nothing to map.
-#if KIIKO_BOARD_METALIO47
     if (file_glyf_len && !s_cur->f_preview) {
-#else
-    if (file_glyf_len) {
-#endif
         try_map_table(
             file_glyf_off, file_glyf_len, &glyf_ram, &glyf_ram_off, &glyf_ram_len, "glyf"
         );
     }
 
     load_variation(header, sizeof(header));
-#if KIIKO_BOARD_METALIO47
     if (gvar_ready && file_gvar_len > 0 && !s_cur->f_preview) {
-#else
-    if (gvar_ready && file_gvar_len > 0) {
-#endif
         try_map_table(
             file_gvar_off, file_gvar_len,
             &gvar_ram, &gvar_ram_off, &gvar_ram_len, "gvar"
@@ -2781,9 +2836,9 @@ esp_err_t ttf_font_open(const char* path) {
     s_cur_index = keep;
     s_cur = &s_slots[keep];
     return err;
-#if KIIKO_BOARD_METALIO47
 }
 
+#if KIIKO_BOARD_METALIO47
 struct ttf_font_prepared { ttf_slot_t face, scratch; };
 static void unload_prepared_here(void) {
     unload_here();
@@ -2847,24 +2902,25 @@ void ttf_font_prepared_free(ttf_font_prepared_t *prepared) {
     heap_caps_free(prepared);
 }
 
-// 名称预览只借空闲书内字体槽，不替换活动阅读字体；槽满就由界面回退普通标签。
-// Name previews borrow an empty embedded slot without replacing the reader face; full slots use a UI label.
-bool ttf_font_draw_preview(const char *path, uint8_t *fb, int x, int y, int px,
-                           const char *text, int width) {
-    if (!path || !fb || !text || !*text || width <= 0) return false;
+#endif
+
+// 只在当前绘制期间借空槽，保留活动字体和书内字体的游标。/ Borrow an empty slot for the draw and restore the previous face and runs.
+bool ttf_font_draw_with_path(const char *path, ttf_face_draw_fn draw, void *context) {
+    if (!path || !draw) return false;
     ttf_font_slots_init();
     int slot = TTF_FONT_SLOT_SYSTEM;
-    bool borrowed = !ttf_font_ready() || strcmp(path, ttf_font_path());
+    const bool borrowed = !ttf_font_ready() || strcmp(path, ttf_font_path());
     if (borrowed) {
         for (slot = TTF_FONT_SLOT_SYSTEM + 1; slot < TTF_FONT_SLOTS; ++slot)
             if (!s_slots[slot].f_used) break;
         if (slot == TTF_FONT_SLOTS) return false;
     }
-    int saved_weight = s_slots[slot].f_weight;
-    int keep = slot_lend(slot);
+    const int saved_weight = s_slots[slot].f_weight;
+    const int keep = slot_lend(slot);
     const ttf_run_t *saved_runs = s_draw_runs;
-    size_t saved_run_count = s_draw_run_count;
-    s_draw_runs = NULL; s_draw_run_count = 0;
+    const size_t saved_run_count = s_draw_run_count;
+    s_draw_runs = NULL;
+    s_draw_run_count = 0;
     bool ok = true;
     if (borrowed) {
         unload_here();
@@ -2874,29 +2930,47 @@ bool ttf_font_draw_preview(const char *path, uint8_t *fb, int x, int y, int px,
         font_fd = open_font_file(path);
         ok = font_fd >= 0 && ensure_work() && load_opened_font() == ESP_OK;
     }
-    if (ok) {
-        ok = ttf_font_slot_has_text(slot, text);
-        if (ok) {
-            while (px > 12 && ttf_text_width_px(px, text) > width) --px;
-            int above = 0, below = 0;
-            ttf_measure_line_px(px, text, &above, &below);
-            ttf_draw_text_px(fb, x, y + (above - below) / 2, px, text,
-                             EPD_DRAW_ALIGN_CENTER, 0, 15);
-        }
-    }
+    if (ok) ok = draw(context);
     if (borrowed) {
+        slot_lend(slot);
         unload_here();
         heap_caps_free(s_cur->f_io_data);
         heap_caps_free(s_cur->f_io_run_buf);
         slot_init(s_cur);
         s_cur->f_weight = saved_weight;
     }
-    s_draw_runs = saved_runs; s_draw_run_count = saved_run_count;
+    s_draw_runs = saved_runs;
+    s_draw_run_count = saved_run_count;
     slot_restore(keep);
     return ok;
-#else
-#endif
 }
+
+#if KIIKO_BOARD_METALIO47
+typedef struct {
+    uint8_t *fb;
+    int x, y, px, width;
+    const char *text;
+} font_preview_t;
+
+static bool draw_preview(void *context) {
+    const font_preview_t *preview = context;
+    if (!ttf_font_slot_has_text(ttf_font_selected(), preview->text)) return false;
+    int px = preview->px;
+    while (px > 12 && ttf_text_width_px(px, preview->text) > preview->width) --px;
+    int above = 0, below = 0;
+    ttf_measure_line_px(px, preview->text, &above, &below);
+    ttf_draw_text_px(preview->fb, preview->x, preview->y + (above - below) / 2, px,
+                     preview->text, EPD_DRAW_ALIGN_CENTER, 0, 15);
+    return true;
+}
+
+bool ttf_font_draw_preview(const char *path, uint8_t *fb, int x, int y, int px,
+                           const char *text, int width) {
+    if (!fb || !text || !*text || width <= 0) return false;
+    font_preview_t preview = {fb, x, y, px, width, text};
+    return ttf_font_draw_with_path(path, draw_preview, &preview);
+}
+#endif
 
 esp_err_t ttf_font_init(void) {
     ttf_font_slots_init();
@@ -2971,22 +3045,28 @@ int ttf_text_left_bearing_px(int pixel_height, const char* text) {
 }
 
 // 线性抗锯齿的中间灰在这块屏上偏亮。按 TTF_COVER_GAMMA 抬覆盖率，半透明边缘更深。
+// 用户2026-11-12：gamma 改为运行时可调，调试页实时对比；默认仍是 TTF_COVER_GAMMA。
+// Linear AA mid-grays look bright on this panel, so coverage is raised by TTF_COVER_GAMMA.
+// User2026-11-12: gamma is runtime-tunable for live debug comparison; default stays TTF_COVER_GAMMA.
 static bool s_antialias = true;
 void ttf_set_antialias(bool enabled) { s_antialias = enabled; }
 bool ttf_get_antialias(void) { return s_antialias; }
 
 /* ---- 绘制 / Draw ---- */
-static void ttf_cover_lut_init(void) {
-    static bool ready;
-    if (ready) return;
+static void ttf_cover_lut_rebuild(void) {
     for (int i = 0; i < 256; i++) {
         float t = (float)i / 255.f;
-        int v = (int)(255.f * powf(t, TTF_COVER_GAMMA) + 0.5f);
+        int v = (int)(255.f * powf(t, s_cover_gamma) + 0.5f);
         if (v < 0) v = 0;
         if (v > 255) v = 255;
         s_cover[i] = (uint8_t)v;
     }
-    ready = true;
+    s_cover_ready = true;
+}
+
+static void ttf_cover_lut_init(void) {
+    if (s_cover_ready) return;
+    ttf_cover_lut_rebuild();
 }
 
 static uint8_t mix_ink(uint8_t alpha, uint8_t fg, uint8_t bg) {

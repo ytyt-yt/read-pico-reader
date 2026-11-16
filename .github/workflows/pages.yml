@@ -62,7 +62,8 @@ concurrency:
 jobs:
   deploy:
     # Metalio 使用受保护的 main 发布站点；其独立标签只归档固件。 / Deploy Metalio metadata from protected main; its tag archives binaries only.
-    if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'metalio-s31-')
+    # Fork发布不部署继承的官网/OTA清单。/ Fork Releases must not deploy inherited official website/OTA manifests.
+    if: github.repository == 'wegooo-cell/read-pico-reader' && (github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'metalio-s31-'))
     runs-on: ubuntu-latest
     environment:
       name: github-pages

@@ -161,6 +161,7 @@ static void main_lock_boundary(void) {
     metalio_frontlight_commit();
 #else
 #endif
+    (void)ble_pt_take_standby();
     ui_click_feedback_reset();
     quick_reset();
     s_presented_main = NULL;
@@ -555,6 +556,8 @@ void app_present(app_ctx_t* ctx,const app_desc_t* app,app_redraw_t redraw) {
     const bool shelf_switch=root_switch &&
         (app_index_of(s_presented_root)==1 || app_index_of(app)==1);
     unsigned prior_quality=display_main_quality_set(white_switch?(shelf_switch?8u:6u):0u);
+    bool prior_fast_background=display_main_fast_background_set(root_switch &&
+        app_settings_main_refresh_mode()==APP_MAIN_REFRESH_FAST);
 #if KIIKO_BOARD_METALIO47
     bool prior_erase=display_main_switch_erase_set(white_switch);
     bool prior_home_erase=display_main_shelf_home_erase_set(root_switch &&
@@ -569,6 +572,7 @@ void app_present(app_ctx_t* ctx,const app_desc_t* app,app_redraw_t redraw) {
     display_main_switch_erase_set(prior_erase);
     display_main_shelf_home_erase_set(prior_home_erase);
 #endif
+    display_main_fast_background_set(prior_fast_background);
     display_main_quality_set(prior_quality);
 }
 
@@ -749,6 +753,9 @@ static void switch_to(
 #endif
     bool main_source = navigation_page_ready(ctx, *current);
     bool shelf_source = main_source && (app_index_of(*current) == 1 || app_index_of(*current) == UI_NAV_COMICS);
+#if KIIKO_BOARD_METALIO47
+    app_book_shelf_prefetch_cancel();
+#endif
     display_main_transition_cancel();
     if ((*current)->on_exit != NULL) (*current)->on_exit(ctx);
 #if defined(KIIKO_LOCAL_LATENCY) || KIIKO_BOARD_METALIO47
@@ -833,7 +840,11 @@ static unsigned s_media_recovery_attempts;
 // 页面已释放句柄后才排队恢复；缺卡等待稳定插入，持续故障按1/3/10/30秒退避。
 // Queue recovery only after page handles close; wait for insertion and back off persistent faults by 1/3/10/30 seconds.
 static void recover_media(app_ctx_t *ctx, const read_pico_sd_info_t *info) {
+#if KIIKO_BOARD_METALIO47
+    if (!info->present) {
+#else
     if (s_media_recovery_attempts && !info->present) {
+#endif
         s_media_recovery_after_ms = ctx->now_ms; return;
     }
     if (!read_pico_sd_needs_recovery() || ctx->now_ms < s_media_recovery_after_ms || pico_online_busy()) return;
@@ -857,44 +868,33 @@ static bool poll_media(app_ctx_t* ctx, const app_desc_t* current,
 #if KIIKO_BOARD_METALIO47
     if (app_sd_recovery_busy()) return false;
     static bool wake_pending;
-    static bool wake_consumers_closed;
     if (!app_sleep_media_ready()) {
-        wake_pending=true;
-        // 挂卡优先：字体/书籍恢复失败时仍让健康检查运行；挂载任务期间不抢生命周期。
-        // Media comes first: failed reopen must not suppress health checks or steal a mount task.
+        wake_pending = true;
         if (usb_storage_active() || pico_online_busy() || app_download_active()) return false;
-        read_pico_transfer_status_t owner={0};
-        online_font_status_t download={0};
+        read_pico_transfer_status_t owner = {0};
+        online_font_status_t download = {0};
         read_pico_transfer_get_status(&owner);
         online_font_status(&download);
         if (owner.state != READ_PICO_TRANSFER_STOPPED || download.busy) return false;
         read_pico_sd_poll_health();
-        if (!app_sleep_media_failed()) return false;
-        bool covers=book_cover_jobs_quiesce(0), avatar=ui_avatar_quiesce(0);
-        if (!covers || !avatar) return false;
-        bool changed=!wake_consumers_closed;
-        if (changed) {
-            // 部分句柄可能已恢复，必须全部释放，不能带着旧VFS句柄重挂。
-            // Partial resumes may own live descriptors: close all before replacing the VFS session.
-            if (current->on_media_lost) current->on_media_lost(ctx);
-            book_close();ttf_font_close_embedded();ttf_font_unload();
-            (void)ttf_font_open_builtin();ui_text_set_system_font(false);
-            ui_avatar_invalidate();book_lock_collage_invalidate();
-            *mounted=false;*invalidated=true;
-            wake_consumers_closed=true;
-        }
-        if (read_pico_sd_invalidate_io() == ESP_OK) {
+
+        read_pico_sd_info_t wake_info = {0};
+        esp_err_t wake_error = read_pico_sd_get_info(&wake_info);
+        if (wake_error == ESP_ERR_NOT_FINISHED || !app_sleep_media_failed()) return false;
+        if (wake_error == ESP_OK && wake_info.mounted) {
+            // A failed book/font reopen is local to that file. Keep the verified mount.
+            bool book_failed = app_sleep_book_reopen_failed();
             app_sleep_discard_media_io();
-            wake_consumers_closed=false;
-            s_media_recovery_after_ms=0;s_media_recovery_attempts=0;
+            if (book_failed && current == &app_book) app_book_wake_file_failed(ctx);
+            (void)app_font_recover_media();
+            wake_pending = false;
+            return true;
         }
-        return changed;
     }
     // 句柄恢复不一定改变挂载/字体路径，也必须补一次完整页面。
     // Resuming handles may leave mount/font identity unchanged; still repaint the page once.
     bool wake_restored=wake_pending;
     wake_pending=false;
-    wake_consumers_closed=false;
 #endif
     if (usb_storage_active()) {
         s_media_recovery_attempts = 0; s_media_recovery_after_ms = 0;
@@ -911,13 +911,26 @@ static bool poll_media(app_ctx_t* ctx, const app_desc_t* current,
         if (probe == ESP_ERR_NOT_FINISHED) return false;
     }
     if (err == ESP_ERR_NOT_FINISHED) return false;
+#if KIIKO_BOARD_METALIO47
+    const bool wake_failed = app_sleep_media_pending();
+    if (wake_failed) app_sleep_discard_media_io();
+#endif
     bool ready = err == ESP_OK && info.mounted;
     bool lost = *mounted && !ready;
+#if KIIKO_BOARD_METALIO47
+    lost |= wake_failed && !ready;
+#endif
     bool gained = !*mounted && ready;
     *mounted = ready;
     if (ready) *invalidated = false;
     if (ready) { s_media_recovery_attempts = 0; s_media_recovery_after_ms = 0; }
-    if (gained || lost) { wallpaper_rotation_invalidate(); ui_avatar_invalidate(); (void)book_cover_jobs_quiesce(0); book_lock_collage_invalidate(); }
+    if (gained || lost) {
+        wallpaper_rotation_invalidate();
+#if KIIKO_BOARD_METALIO47
+        app_book_shelf_prefetch_reset();
+#endif
+        ui_avatar_invalidate(); (void)book_cover_jobs_quiesce(0); book_lock_collage_invalidate();
+    }
     if (gained && current->on_media_ready) current->on_media_ready(ctx);
 #if KIIKO_BOARD_METALIO47
     bool font_restored=gained && app_font_recover_media();
@@ -939,7 +952,16 @@ static bool poll_media(app_ctx_t* ctx, const app_desc_t* current,
     }
     *invalidated = true;
     if (current->on_media_lost) current->on_media_lost(ctx);
+#if KIIKO_BOARD_METALIO47
+    book_close();
+    ttf_font_close_embedded();
+    if (!ttf_font_ready() || !ttf_font_is_builtin()) {
+        ttf_font_unload();
+        (void)ttf_font_open_builtin();
+    }
+#else
     if (ttf_font_ready() && !ttf_font_is_builtin()) ttf_font_open_builtin();
+#endif
     ui_text_set_system_font(false);
     return true;
 }
@@ -984,29 +1006,44 @@ static void run_power_action(app_ctx_t *ctx, const app_desc_t *current, bool res
     app_present(ctx, current, APP_REDRAW_PAGE);
 }
 
+#if KIIKO_BOARD_METALIO47
+bool app_touch_input_pending(app_ctx_t *ctx) {
+    cst836u_touch_t touch = {0};
+    return ctx->request_app || ctx->request_return || ctx->request_menu ||
+        (ctx->tp && cst836u_peek_touch(ctx->tp, &touch));
+}
+#endif
+
 bool app_poll_main_navigation(app_ctx_t *ctx) {
     if(!ctx||!ctx->tp)return false;
     if(ctx->request_app)return true;
     cst836u_touch_t touch={0};
+#if KIIKO_BOARD_METALIO47
+    if (!cst836u_peek_touch(ctx->tp, &touch) || touch.count != 1) {
+#else
     if(cst836u_read(ctx->tp,&touch)!=ESP_OK||!touch.touched||touch.count!=1) {
+#endif
         s_nav_contact_down=s_nav_polled=false;return false;
     }
     int index=ui_nav_hit(touch.x,touch.y);
     if(index<0)return false;
+#if KIIKO_BOARD_METALIO47
+    if (index == 1) return false;
+#endif
     if(!s_nav_contact_down) {
         s_nav_contact_down=s_nav_polled=true;
 #if KIIKO_BOARD_METALIO47
         (void)metalio_haptic_click();
-        if(index!=1)ui_nav_request(ctx,index);
+        ui_nav_request(ctx, index);
 #else
         if(index!=1)ui_nav_request(ctx,index);
-#endif
-        ctx->user_activity=true;
         if(ctx->fb&&ctx->hl) {
             EpdRect area;ui_click_feedback_nav_request(index);
             if(ui_click_feedback_nav_tick(ctx->fb,esp_timer_get_time()/1000,&area))
                 click_present(ctx,&app_book,area);
         }
+#endif
+        ctx->user_activity=true;
     }
     return ctx->request_app!=NULL;
 }
@@ -1044,6 +1081,7 @@ void app_loop_run(const app_loop_config_t* config) {
     ui_power_dialog_t power_dialog = {0};
 #if KIIKO_BOARD_METALIO47
     bool power_dialog_open = false; ui_power_dialog_end();
+    bool wake_page_pending = false;
 #else
     bool power_dialog_open = false;
 #endif
@@ -1164,7 +1202,14 @@ void app_loop_run(const app_loop_config_t* config) {
 
         if (ctx.now_ms - last_media_poll_ms >= MEDIA_POLL_INTERVAL_MS) {
             last_media_poll_ms = ctx.now_ms;
-            if (poll_media(&ctx, current, &media_mounted, &media_invalidated)) {
+            bool media_redraw = poll_media(&ctx, current, &media_mounted, &media_invalidated);
+#if KIIKO_BOARD_METALIO47
+            if (wake_page_pending && (media_redraw || !app_sleep_media_pending())) {
+                wake_page_pending = false;
+                media_redraw = true;
+            }
+#endif
+            if (media_redraw) {
                 power_dialog_open = false;
                 ui_power_dialog_end();
                 ui_power_dialog_reset(&power_dialog, touch.touched);
@@ -1185,6 +1230,12 @@ void app_loop_run(const app_loop_config_t* config) {
         }
 
 #if KIIKO_BOARD_METALIO47
+        if (wake_page_pending) {
+            // The panel retains its lock frame until the reader's TF handles are available.
+            was_touched = touch.touched;
+            vTaskDelay(pdMS_TO_TICKS(LOOP_TICK_MS));
+            continue;
+        }
         // 实体AI输入先于页面触摸派发；覆盖时冻结底页，关层的抬手也不可穿透。
         // Route physical AI before page touches; freeze the underlay and consume the closing release.
         bool ai_owned=s_ai.open;
@@ -1197,10 +1248,12 @@ void app_loop_run(const app_loop_config_t* config) {
             if(s_ai.open&&!ai_allowed){ai_dismiss(&ctx,current,true);ai_owned=true;}
             if(ai_event && ai_allowed && !touch.touched && !ui_click_feedback_active() && !ui_click_feedback_nav_pending()){
                 held_key=-1;cancel_gesture(&ctx,current,&gesture);last_input_ms=ctx.now_ms;ai_owned=true;
+                app_book_pause_auto();
                 if(s_ai.open)ai_dismiss(&ctx,current,true);
                 else if(ai_event==METALIO_AI_LONG){
                     int64_t at=esp_timer_get_time();(void)at;
                     if(ui_ai_menu_begin(&s_ai,ctx.fb,app_settings_ai_short(),current==&app_book&&app_book_reader_body_visible())){
+                        app_book_pause_auto();
                         ESP_LOGI(TAG,"AI menu compose=%lldms",(long long)((esp_timer_get_time()-at)/1000));
                         (void)metalio_haptic_click();ai_push(&ctx,current,s_ai.rect);
                     }
@@ -1278,8 +1331,10 @@ void app_loop_run(const app_loop_config_t* config) {
                     ctx.consumed = true;
                 }
 #if KIIKO_BOARD_METALIO47
+                if (action == UI_QUICK_OPEN) app_book_pause_auto();
                 if (action == UI_QUICK_OPEN || action == UI_QUICK_CLOSE) { metalio_frontlight_commit(); quick_present(&ctx, current, false); }
 #else
+                if (action == UI_QUICK_OPEN) app_book_pause_auto();
                 if (action == UI_QUICK_OPEN || action == UI_QUICK_CLOSE) quick_present(&ctx, current, false);
 #endif
                 else if (action == UI_QUICK_WIFI) {
@@ -1365,6 +1420,7 @@ void app_loop_run(const app_loop_config_t* config) {
                         main_lock_boundary();
                         enter_lock_and_sleep(ctx.hl, &s_lock_ignore_until_ms, ctx.acc, ctx.tp,
                                              current == &app_book && app_book_reader_body_visible());
+                        (void)ble_pt_take_standby();
                         display_request_full_refresh();
                         ctx.now_ms = esp_timer_get_time() / 1000;
                         last_input_ms = ctx.now_ms;
@@ -1570,14 +1626,21 @@ void app_loop_run(const app_loop_config_t* config) {
                         prepare_lock(&ctx, current, true);
                         main_lock_boundary();
                         enter_lock_and_sleep(ctx.hl, &s_lock_ignore_until_ms, ctx.acc, ctx.tp, true);
+                        (void)ble_pt_take_standby();
                         display_request_full_refresh();
                         ctx.now_ms = esp_timer_get_time() / 1000;
                         last_input_ms = ctx.now_ms;
-                        poll_media(&ctx, current, &media_mounted, &media_invalidated);
+                        const bool media_redraw = poll_media(&ctx, current, &media_mounted, &media_invalidated);
                         last_media_poll_ms = ctx.now_ms;
                         ctx.consumed = true;
                         ctx.pressed = false;
                         ctx.released = false;
+#if KIIKO_BOARD_METALIO47
+                        wake_page_pending = !media_redraw && app_sleep_media_pending();
+                        if (wake_page_pending) continue;
+#else
+                        (void)media_redraw;
+#endif
                         app_present(&ctx, current, APP_REDRAW_PAGE);
                     } else {
                         power_dialog_open = true;
@@ -1613,14 +1676,21 @@ void app_loop_run(const app_loop_config_t* config) {
                         main_lock_boundary();
                         enter_lock_and_sleep(ctx.hl, &s_lock_ignore_until_ms, ctx.acc, ctx.tp,
                                              !menu_open && current == &app_book && app_book_reader_body_visible());
+                        (void)ble_pt_take_standby();
                         display_request_full_refresh();
                         ctx.now_ms = esp_timer_get_time() / 1000;
                         last_input_ms = ctx.now_ms;
-                        poll_media(&ctx, current, &media_mounted, &media_invalidated);
+                        const bool media_redraw = poll_media(&ctx, current, &media_mounted, &media_invalidated);
                         last_media_poll_ms = ctx.now_ms;
                         ctx.consumed = true;
                         ctx.pressed = false;
                         ctx.released = false;
+#if KIIKO_BOARD_METALIO47
+                        wake_page_pending = !media_redraw && app_sleep_media_pending();
+                        if (wake_page_pending) continue;
+#else
+                        (void)media_redraw;
+#endif
                         // 醒来还在同一页，重画一次免得留着锁屏图。
                         // Still the same page; redraw so the lock image does not stay.
                         if (menu_open) present_menu(&ctx, current, menu_leaf, &feedback);
@@ -1705,6 +1775,7 @@ void app_loop_run(const app_loop_config_t* config) {
         ble_pt_sync(app_settings_ble_turner() && !wifi_busy);
 #endif
         ble_pt_poll();
+        bool remote_standby=ble_pt_take_standby();
         if (s_quick.open || ai_overlay_open() || quick_input_owned) {
             // 覆盖层期间丢弃页内蓝牙输入，关闭后不重放翻页或学习事件。
             // Discard page BLE input while covered, without replaying turns or learning edges after closing.
@@ -1717,7 +1788,10 @@ void app_loop_run(const app_loop_config_t* config) {
 #else
         if (s_quick.open && quick_status() != s_quick_status) quick_buttons_present(&ctx,current);
 #endif
-        if (!power_dialog_open && !s_quick.open && !quick_input_owned && !ui_click_feedback_active() && !menu_open && !ctx.request_app && !ctx.request_menu && !ctx.request_return && current->on_tick != NULL) {
+        const bool page_exposed = !power_dialog_open && !s_quick.open && !quick_input_owned &&
+            !menu_open && !ctx.request_app && !ctx.request_menu && !ctx.request_return;
+        if (current == &app_book) app_book_ticket_sample(ctx.now_ms, page_exposed && !ai_overlay_open());
+        if (page_exposed && !ui_click_feedback_active() && current->on_tick != NULL) {
             app_redraw_t redraw = current->on_tick(&ctx);
             if (redraw == APP_REDRAW_PAGE || redraw == APP_REDRAW_FULL) held_key = -1;
             present_page(&ctx, current, &gesture, redraw);
@@ -1736,7 +1810,7 @@ void app_loop_run(const app_loop_config_t* config) {
         if (!power_dialog_open && !s_quick.open && !quick_input_owned && !menu_open &&
             !current->holds_pmu && !usb_storage_active() && !touch.touched &&
             !ui_click_feedback_active() && !ctx.request_app && !ctx.request_menu && !ctx.request_return &&
-            ui_nav_refresh_power(ctx.fb)) {
+            (current!=&app_book||app_book_status_bar_visible())&&ui_nav_refresh_power(ctx.fb)) {
 #if KIIKO_BOARD_METALIO47
             bool previous=display_system_binary_set(app_binary_ui(&ctx,current));
             bool previous_nav=display_system_navigation_set(navigation_page_ready(&ctx,current));
@@ -1765,8 +1839,12 @@ void app_loop_run(const app_loop_config_t* config) {
             ctx.request_app || ctx.request_menu || ctx.request_return;
         if (idle_blocked || requested_idle != idle_minutes) last_input_ms = ctx.now_ms;
         idle_minutes = requested_idle;
+        // Recognized standby uses the existing lock/resume path, with normal lock safety gates.
+        extern const app_desc_t app_book;
+        bool remote_lock=remote_standby && !menu_open && !s_quick.open && !quick_input_owned && !ai_overlay_open() &&
+            current==&app_book && app_book_reader_body_visible();
         if (!idle_blocked && ctx.now_ms >= s_lock_ignore_until_ms &&
-            auto_lock_due(ctx.now_ms, last_input_ms, idle_minutes)) {
+            (remote_lock || auto_lock_due(ctx.now_ms, last_input_ms, idle_minutes))) {
 #if KIIKO_BOARD_METALIO47
             // 不因配置层常亮阻止自动锁屏；透明锁屏须先恢复真实底页，避免缓存玻璃面板。
             // A chooser never disables idle lock; restore the physical underlay before transparent lock artwork can cache it.
@@ -1776,17 +1854,24 @@ void app_loop_run(const app_loop_config_t* config) {
             cancel_gesture(&ctx, current, &gesture);
             if (menu_pressed >= 0) menu_feedback(&ctx, current, menu_leaf, menu_pressed, false, &feedback);
             menu_pressed = UI_MENU_HIT_NONE;
-            prepare_lock(&ctx, current, false);
+            prepare_lock(&ctx, current, remote_lock);
             extern const app_desc_t app_book;
             main_lock_boundary();
             enter_lock_and_sleep(ctx.hl, &s_lock_ignore_until_ms, ctx.acc, ctx.tp,
                                  !menu_open && current == &app_book && app_book_reader_body_visible());
+            (void)ble_pt_take_standby();
             display_request_full_refresh();
             ctx.now_ms = esp_timer_get_time() / 1000;
             last_input_ms = ctx.now_ms;
-            poll_media(&ctx, current, &media_mounted, &media_invalidated);
+            const bool media_redraw = poll_media(&ctx, current, &media_mounted, &media_invalidated);
             last_media_poll_ms = ctx.now_ms;
             ctx.pressed = ctx.released = false;
+#if KIIKO_BOARD_METALIO47
+            wake_page_pending = !media_redraw && app_sleep_media_pending();
+            if (wake_page_pending) continue;
+#else
+            (void)media_redraw;
+#endif
             if (menu_open) present_menu(&ctx, current, menu_leaf, &feedback);
             else app_present(&ctx, current, APP_REDRAW_PAGE);
         }
@@ -1882,6 +1967,12 @@ void app_loop_run(const app_loop_config_t* config) {
         bool fade_blocked=idle_blocked||menu_open||power_dialog_open||s_quick.open||quick_input_owned||
             ui_click_feedback_active()||ui_click_feedback_nav_pending()||touch.touched||touch.count>1||
             ctx.consumed||ctx.request_app||ctx.request_menu||ctx.request_return||ctx.now_ms<s_lock_ignore_until_ms;
+        if (!fade_blocked && !ai_overlay_open() && current != &app_book &&
+            !pico_online_busy() && main_page_ready(&ctx, current) && ctx.now_ms - last_input_ms >= 300) {
+            app_book_shelf_prefetch_first(&ctx);
+        } else {
+            app_book_shelf_prefetch_cancel();
+        }
         if(anti_fade_due(ctx.now_ms,last_input_ms,fade_blocked)){
             display_request_full_refresh();
             app_present(&ctx,current,APP_REDRAW_PAGE);

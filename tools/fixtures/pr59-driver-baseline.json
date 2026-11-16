@@ -220,21 +220,27 @@
   },
   "approved_overrides": {
     "boards/pico/src/main/sleep.c": {
-      "sha256": "2860def914a6b0bf1d800c8ee497115630ee8fa95f5fce4d6457531520f926b8",
+      "sha256": "124347083212963c5ef2ef96a69655889d18a111f23d8b41286079e8bf5c578b",
       "user_decision": "用户2026-11-04要求Pico四种锁屏样式一起优化且保留保护：正常锁屏/浅睡解锁单次GC16、页面恢复后重启网络，拼贴提示只局部GC16；反馈/绘图/输出失败保留原清屏，缓存/PIN/深睡策略及波形不变。 / User2026-11-04 extends the Pico optimization to all four lock styles: one GC16 lock/light-wake restore, deferred network restart and local GC16 collage feedback; retain clearing on feedback/art/output failure and preserve cache/PIN/deep-sleep/waveform behavior. 用户2026-11-04报告透明书封透字并要求修复：仅透明书封入锁增加一次原GC16白目标后输出最终图，不改原表、供电与解锁逻辑，分配/显示失败沿用清屏兜底。 / User2026-11-04 authorizes one calibrated white GC16 target before transparent-cover art to address ghosting, retaining raw tables, power, unlock logic and allocation/display-failure recovery. 用户确认透明书封不再透字后要求其他类型一并修复：将一次GC16白目标+最终图扩展到Pico四种锁屏，异常清屏与解锁保护保持。 / After device confirmation, the user requests the same white-target plus final-image sequence for all four Pico lock styles, retaining failure recovery and unlock protection.",
-      "source_commit": "570d626337a918191590f3d68eb75ed57abf42c4",
-      "reason": "随机壁纸锁屏先汇合可取消预热，成功推屏后提交图片；既有清屏、供电/PIN/恢复路径保持。 / Random wallpaper locks join cancellable warming and commit after presentation; retain clearing, power/PIN and restore paths."
+      "reason": "随机壁纸锁屏先汇合可取消预热，成功推屏后提交图片；既有清屏、供电/PIN/恢复路径保持。 / Random wallpaper locks join cancellable warming and commit after presentation; retain clearing, power/PIN and restore paths.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
     },
     "main/sleep.h": {
-      "sha256": "0c067e19583e5ee75fd726f0bf773482b280346b795f88fd80ec2f175b99f4c5",
+      "sha256": "1a4c222dd1a6684401cdf23cae1d508346f86c030239e509f9f60c6160453393",
       "pull_request": 71,
-      "source_commit": "24e70e0057c44da826270822f4c831f5911de0e5",
-      "reason": "Retain the merged PR71 API; User2026-11-04 all-style Pico lock optimization updates only the local-GC16 collage-feedback contract comment. No declarations or S31 behavior changed."
+      "reason": "Retain the merged PR71 API; User2026-11-04 all-style Pico lock optimization updates only the local-GC16 collage-feedback contract comment. No declarations or S31 behavior changed.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
     },
     "boards/metalio47/src/main/sleep.c": {
-      "sha256": "d3148307d37bdec425904045c6b72e3bd7addfef4c3f4ce430f35dcf272bae72",
+      "sha256": "207f47bcae8f0054120c514acda7bfce70e8aa079ed4518389e3de594440db94",
       "reason": "随机壁纸锁屏先汇合可取消预热，提交实际显示身份；保留原唤醒清白、供电与PIN。 / Random wallpapers join cancellable warming and commit displayed identity; retain wake clearing, power and PIN.",
-      "source_commit": "570d626337a918191590f3d68eb75ed57abf42c4"
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
     },
     "components/metalio_hw/CMakeLists.txt": {
       "sha256": "75f3504a8850c7275cbdd986d08947fe182661b1f308b3cf6480afb4f86ff36f",
@@ -242,15 +248,16 @@
       "reason": "User2026-11-03 authorized the CX25601N charger driver; this CMakeLists only adds metalio_charger.c to the S31-only source list."
     },
     "components/read_pico_pmu/metalio_power_adapter.c": {
-      "sha256": "a3ee90b75cd911422c9af4c8c600f09bfa7acbfa7e481251acce186d5936a2e7",
-      "user_decision": "2026-11-03",
-      "reason": "User2026-11-03 authorized the CX25601N charger optimization; charger_init now delegates to metalio_charger while battery status decoding stays unchanged."
+      "sha256": "4f6a59806ff47d3c59a9e23bde6a0fbdf539e69d4985a9173433a1f14bb59516",
+      "reason": "User2026-11-09: align S31 displayed battery estimation/filter/wake reset to official v2.0.77; preserve charger control and Pico."
     },
     "boards/pico/src/main/display_reader_waveform.c": {
-      "sha256": "784b170d1d67d4813a351dfde2984cf83e8b1806c8a3383598c963fefab003dc",
-      "source_commit": "fcfa9b0f9b5b842d139e4a24132235b99e8a8acd",
+      "sha256": "a8114e5cd4c5122f224eced8a22d898680d40cd188fbbed30af03c76fad8624b",
       "reason": "同步main PR2独立清晰水波纹派生序列；原始表与原水波纹保持。 / Pin main PR2 separate derived Clear ripple; retain raw tables and original ripple.",
-      "source_pull_request": "https://github.com/ytyt-yt/read-pico-reader/pull/2"
+      "source_pull_request": "https://github.com/ytyt-yt/read-pico-reader/pull/2",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
     },
     "boards/metalio47/src/main/display_reader_waveform.c": {
       "sha256": "e256413af08373f8cd394fd09ef352880dc60966b658d3ba05201cefbe6b08cf",
@@ -258,42 +265,54 @@
       "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases)."
     },
     "boards/metalio47/src/components/e0470_epaper_waveform/e0470_epaper_waveform.c": {
-      "sha256": "fad0b3b9c22fe9af5ecbb02385b2381f0462bba30bbe38d018e1530fb4b2d3e3",
+      "sha256": "c7dbea4dc78ce57d9b87e5406caff4b6126da25386bc3279892afa3f3a321e76",
       "reason": "User2026-11-01 explicitly approved PR64 as authored, superseding the previous derived-waveform pin for this file.",
-      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases)."
+      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases).",
+      "settings_short_motion_authorization": "User2026-11-07 requests an opt-in S31 settings-only14-phase motion accessor, keeping global DU14 off and existing reader/idle/raw profiles unchanged; local delivery only."
     },
     "components/e0470_epaper_waveform/include/e0470_epaper_waveform.h": {
-      "sha256": "45c3c161ec5f64d10eb735a4fe3822054aa6147573f849499051a72526f0a079",
+      "sha256": "748f1506470a50792bb9229eb4d7f67464e429c6bfaa9934504e832c781592ac",
       "reason": "User2026-11-01 explicitly approved PR64 as authored, superseding the previous derived-waveform pin for this file.",
-      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases)."
+      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases).",
+      "settings_short_motion_authorization": "User2026-11-07 requests an opt-in S31 settings-only14-phase motion accessor, keeping global DU14 off and existing reader/idle/raw profiles unchanged; local delivery only."
     },
     "boards/metalio47/src/components/read_pico/read_pico_sd.c": {
-      "sha256": "6447cc070ff5cceefc7f4e8fb1ccaa006c2be5d019aadc5babf8b59ef3ecc7fd",
-      "reason": "User2026-11-02: S31 wake/font and keep-light policy, bounded Wi-Fi reception and read-only SD profile diagnostics; preserve native pins, power sequence, waveforms and SD fallback."
+      "sha256": "10db62cc18ac3195b46bce6ec25f872bac53fd8381e4b97692071c0849409046",
+      "reason": "User2026-11-02: S31 wake/font and keep-light policy, bounded Wi-Fi reception and read-only SD profile diagnostics; preserve native pins, power sequence, waveforms and SD fallback.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
     },
     "components/read_pico/CMakeLists.txt": {
       "sha256": "8aecef52d3c4b20cce992ba2672744d8c996b5f8699bf195b96b45a9437d6721",
       "reason": "User2026-11-02: S31 SD admission and shared VFS/USB initialization; retain native fallback, recovery and board isolation."
     },
     "components/read_pico/include/read_pico_sd.h": {
-      "sha256": "08233e4107469c665c5f2feec22ce78c3fdb6f51bc33b62c56caed977d95dccb",
-      "reason": "User2026-11-02: S31 wake/font and keep-light policy, bounded Wi-Fi reception and read-only SD profile diagnostics; preserve native pins, power sequence, waveforms and SD fallback."
+      "sha256": "68a1a34db255b0585d3226f79ea4e70128843808f7466bbd9d8e16be92d37df8",
+      "reason": "User2026-11-02: S31 wake/font and keep-light policy, bounded Wi-Fi reception and read-only SD profile diagnostics; preserve native pins, power sequence, waveforms and SD fallback.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
     },
     "boards/pico/src/components/e0470_page_turn/e0470_page_turn.c": {
-      "sha256": "e43d8d513ab3518d38eae3fb430189d3be83416f95b43d1a5cef960ef3e9b53f",
-      "source_commit": "fcfa9b0f9b5b842d139e4a24132235b99e8a8acd",
+      "sha256": "2964c917fee040885ad0b8b7f6d261a791628e91c77162be8e19bfd15410924f",
       "reason": "同步main PR2清晰水波纹的65相容量，原水波纹和原始表保持。 / Pin merged main PR2 capacity for65-phase Clear ripple; original ripple and raw tables remain unchanged.",
-      "source_pull_request": "https://github.com/ytyt-yt/read-pico-reader/pull/2"
+      "source_pull_request": "https://github.com/ytyt-yt/read-pico-reader/pull/2",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
     },
     "CMakeLists.txt": {
       "sha256": "a9b7d22f5ab7bc3117f86b54335bd8b7559a1370517691c2c3a66b8762ea0b08",
       "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases)."
     },
     "boards/metalio47/src/main/display.c": {
-      "sha256": "c13dbebfde748f958ba030a7271c15b6de744b8e84c8bf4ba65dae27e716a24d",
+      "sha256": "5ee090dabe3cafca534fe49f66c45ab56793dc2e28e2595c2fb305ee94f81352",
       "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases).",
-      "source_commit": "76c030675067ac55b5a779c3e767395dab13ecc5",
-      "reason": "同步main已合入的S31最大力度屏幕修复（多轮既有清屏和完整GC16），原始表/供电不变。 / Pin the merged maximum-strength S31 panel repair using existing clears/full GC16; raw tables and power remain unchanged."
+      "reason": "同步main已合入的S31最大力度屏幕修复（多轮既有清屏和完整GC16），原始表/供电不变。 / Pin the merged maximum-strength S31 panel repair using existing clears/full GC16; raw tables and power remain unchanged.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
     },
     "components/read_pico_pmu/README.md": {
       "sha256": "17e5f056acaf1d4102fef058c367afe7d4c1b159ee39aba779be0e86af03116d",
@@ -320,8 +339,11 @@
       "reason": "同步main PR2独立清晰水波纹声明及原模式说明，S31接口保持。 / Pin main PR2 separate Clear ripple declarations and original-mode documentation; retain S31 APIs."
     },
     "components/epdiy/src/highlevel.c": {
-      "sha256": "92c50435e721b7fb1cefb4566ac193409babe21f7a7542283fb1596e84ae42a1",
-      "user_decision": "用户2026-11-04要求从最新main创建feature分支修复Pico进度线闪黑，版本不变。仅Pico精确屏蔽局刷裁剪外像素并同步后缓冲范围，S31执行代码与原波形保持。 / User2026-11-04 requests the Pico progress-track fix on a feature branch from latest main without version changes. Exact Pico scan masks and back-buffer bounds only; S31 executable code and waveforms remain unchanged."
+      "sha256": "cb01583e786fdf0816fc195e78fb91ecb0a6889d5041ddffc56b00a4bbdfc8f4",
+      "user_decision": "用户2026-11-04要求从最新main创建feature分支修复Pico进度线闪黑，版本不变。仅Pico精确屏蔽局刷裁剪外像素并同步后缓冲范围，S31执行代码与原波形保持。 / User2026-11-04 requests the Pico progress-track fix on a feature branch from latest main without version changes. Exact Pico scan masks and back-buffer bounds only; S31 executable code and waveforms remain unchanged.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
     },
     "components/epdiy/LICENSE": {
       "sha256": "9d0c6c1bf7bf8f9587b6959c3bc7f9271f2abb9bf48be8e4e782baa06bb22648",
@@ -331,15 +353,109 @@
       "sha256": "c4e9ac447b6e9db85647d10ec63a4d4f5ada444f3fa9ad3b9602b9d1dee3da10",
       "reason": "User2026-11-04 adopts S31 data-only zero-prefix DMA and CKV-high frame start from vendor2.0.74; retain clocks, pipeline, interrupts, power and Moku waveforms."
     },
-    "boards/pico/src/main/display.c": {
-      "sha256": "ab0a2410f8626e2979f04d0107b4666e2795a86e4653faf9b5eef094d8ca1bca",
-      "source_commit": "fcfa9b0f9b5b842d139e4a24132235b99e8a8acd",
-      "reason": "同步main已合入的图片水波纹及PR2独立清晰文字档/FULL扫描，原模式、供电与释放路径保持。 / Pin merged image ripple and PR2 separate Clear text/FULL scan, retaining existing modes, power and release paths."
-    },
     "main/display.h": {
-      "sha256": "f33c2cc8bd0282c5e6c755921de4a9eb71611b3629c75e194fb93cd70a465a94",
-      "source_commit": "93ff710fb9cae733ab1f2bd072a89bf93edbd738",
-      "reason": "同步main PR1已合入的图片水波纹声明，不改变硬件行为。 / Pin the image-ripple declaration already merged by main PR1; no hardware behavior change."
+      "sha256": "6a5d80d1007b3d57316a756c6386b070e263d1616da247be8f113c10cae53b31",
+      "reason": "User2026-11-05 explicitly requests Pico reader idle rail retention; expose only the Pico lifecycle setter, preserving S31, waveform bytes, voltages and existing power-off sequencing.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
+    },
+    "boards/pico/src/main/display.c": {
+      "sha256": "101ba6699e71afa1224edf7b9c404563002f317b910180a8b3502413900b4115",
+      "reason": "User2026-11-05 enables Pico reader idle HV retention with neutral pixel/VCOM release, exit/lock revocation and retained fault timeout; preserve original waveforms, voltages, timing and S31.",
+      "pico_settings_motion_authorization": "User2026-11-07 reports excessive dark ghosts during Pico settings motion; add only a scoped12-phase FOLLOW-derived profile (retain black7,white12/equal-white2) and recognize its FAST identity. Full-pixel list motion only; preserve existing Moku profiles, scan timing, reader/idle, power and S31. Local-only delivery.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
+    },
+    "components/e0470_epaper_waveform/CMakeLists.txt": {
+      "sha256": "595e9561dd93e7be298d3cd8372ae0e08024512bafd636513cc842fb105e5d1a",
+      "settings_short_motion_authorization": "User2026-11-07 requests an opt-in S31 settings-only14-phase motion accessor, keeping global DU14 off and existing reader/idle/raw profiles unchanged; local delivery only."
+    },
+    "boards/pico/src/main/display_main_waveform.c": {
+      "sha256": "56b119c03ecef23dcdfabe36e9fe6e67e08ad53ce383123fd1e240aea0ec261f",
+      "pico_settings_motion_authorization": "User2026-11-07 reports excessive dark ghosts during Pico settings motion; add only a scoped12-phase FOLLOW-derived profile (retain black7,white12/equal-white2) and recognize its FAST identity. Full-pixel list motion only; preserve existing Moku profiles, scan timing, reader/idle, power and S31. Local-only delivery.",
+      "pico_settings_steady_motion_authorization": "User2026-11-07 reports white flashing during held Pico settings drags in8853. Remove only scoped equal-white maintenance and use changed-only DU12; retain changed-white12/black7, existing FAST timing and800ms idle53 recovery. Existing Moku tables,reader,power and S31 unchanged; local delivery only.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
+    },
+    "main/display_main_waveform.h": {
+      "sha256": "0edce3a7533c78549a8a7cec03cadb97a8cc2db4b45823e6829d149b06a3c230",
+      "pico_settings_motion_authorization": "User2026-11-07 reports excessive dark ghosts during Pico settings motion; add only a scoped12-phase FOLLOW-derived profile (retain black7,white12/equal-white2) and recognize its FAST identity. Full-pixel list motion only; preserve existing Moku profiles, scan timing, reader/idle, power and S31. Local-only delivery.",
+      "pico_settings_steady_motion_authorization": "User2026-11-07 reports white flashing during held Pico settings drags in8853. Remove only scoped equal-white maintenance and use changed-only DU12; retain changed-white12/black7, existing FAST timing and800ms idle53 recovery. Existing Moku tables,reader,power and S31 unchanged; local delivery only.",
+      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
+      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
+    },
+    "components/read_pico_pmu/CMakeLists.txt": {
+      "sha256": "3e5542a8d6408cce9dfe6d268ad5f038c190b69a8b9e2147152c3f6bcb4aa937",
+      "reason": "User2026-11-09: align S31 displayed battery estimation/filter/wake reset to official v2.0.77; preserve charger control and Pico."
+    },
+    "boards/metalio47/src/main/display_main_waveform.c": {
+      "sha256": "583003fca3f3255540f66efd939938f11fc615b0e9db8aac9b6a2e10ce847e0d",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "boards/pico/src/components/read_pico/read_pico_board.c": {
+      "sha256": "79f262c6a1b6f07c30ca37cc5b063830636fc492cfd328972a98a18da239f5cf",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/ble_page_turner/include/ble_page_turner.h": {
+      "sha256": "6dcc750f25294063c37ecf0f425981c2b2d623509ac8d209c121d09a1b101e19",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/ble_page_turner/src/ble_page_turner.c": {
+      "sha256": "f455f0c9fd6218efbecb3e32e3d0b85de88fd2927409a86d6984133c0caea941",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/cst836u/include/cst836u.h": {
+      "sha256": "9f87fbc9f4fc4dab3f42e5dbbfa8a49f2d58264a8cdde6790707093de552f016",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/cst836u/metalio_ft6336.c": {
+      "sha256": "09ee771520a70c31c76457c77b74cdcfd82900366c7be4e82160ee6970aa9748",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/epdiy/src/epd_highlevel.h": {
+      "sha256": "aacfc26f8320eac60316ecee41857c211a41474215ff1331535b77f22e51e3c3",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/metalio_hw/include/metalio_hw.h": {
+      "sha256": "da9889d5d49488f54388885cb09bae51ba90c5892dab73da8497aad74f000b90",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/metalio_hw/include/metalio_sleep.h": {
+      "sha256": "20c87189bf938d6ba447fdb7433d8dde6d79e9f4c31677c397930d934b4556c0",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/metalio_hw/metalio_hw.c": {
+      "sha256": "249cd824ada2402535a4cfc85af752743be4d9fc0de2fc0756fa30fd8e02d374",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/metalio_hw/s31_sleep/s31_sleep.cc": {
+      "sha256": "a72eacb4a59362157e9286599bd60a185e47103d5f1c4b9d7c12085675c90c79",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/metalio_hw/s31_sleep/s31_sleep.h": {
+      "sha256": "28bc278029258ff1ac1684201c7cd01267d1ba74c128405de8f981da4ef02108",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+    },
+    "components/read_pico/include/read_pico_board.h": {
+      "sha256": "5c99caf9935eac1c05ab88dfdc2ef090277ce63bbaa6826f44d39e5f7f19ac40",
+      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
+      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
     }
   }
 }
