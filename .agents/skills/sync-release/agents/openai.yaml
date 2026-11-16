@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+interface:
+  display_name: "Sync and Release"
+  short_description: "Sync upstream and release Pico/S31 firmware"
+  default_prompt: "Use $sync-release to sync upstream and release both boards."
