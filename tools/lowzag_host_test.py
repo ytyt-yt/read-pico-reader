@@ -24,6 +24,7 @@ unit = r'''
 #include <stdlib.h>
 #include <string.h>
 #include "lowzag.h"
+#define ESP_PLATFORM 1
 #define MALLOC_CAP_SPIRAM 1
 #define MALLOC_CAP_8BIT 2
 typedef struct {unsigned x,y,width,height;} book_crop_t;
@@ -35,7 +36,7 @@ static size_t heap_caps_get_free_size(unsigned caps){assert(caps==3);return budg
 static void *heap_caps_malloc(size_t n,unsigned caps){assert(caps==3);if(++allocations==fail_at)return NULL;return malloc(n);}
 static void heap_caps_free(void *p){free(p);}
 '''
-for name in ('cover_alloc', 'luminance', 'scale_axis', 'scale_map', 'scale_next', 'bilinear4', 'book_cover_crop'):
+for name in ('cover_alloc', 'image_work_budget', 'luminance', 'scale_axis', 'scale_map', 'scale_next', 'bilinear4', 'book_cover_crop'):
     unit += function(name, source) + '\n'
 start = text.index('typedef struct { const uint8_t *data; size_t size, pos; } lowzag_mem_input_t;')
 end = text.index('#endif', start)
