@@ -23,6 +23,8 @@ unit = r'''
 #include "reader_controls.h"
 typedef struct {int x,y,width,height;} EpdRect;
 typedef struct {int64_t now_ms;int leaf;bool consumed,user_activity;} app_ctx_t;
+static bool s_shelf_open_queued, s_part_more;
+static size_t s_part_base, s_text_len;
 typedef enum {APP_REDRAW_NONE,APP_REDRAW_AREA,APP_REDRAW_PAGE,APP_REDRAW_FULL} app_redraw_t;
 enum {READING,TOC,SHELF,READER_PANEL_NONE,READER_PANEL_TOOLS};
 #define BOOK_TOC_ROWS 7
@@ -107,6 +109,7 @@ static void save_progress(void){++saves;}
 static void free_book(void){assert(!draw_locked);s_text=NULL;}
 static size_t book_chapter_count(void){return 2;}
 static bool load_chapter(app_ctx_t *ctx,size_t chapter,int off,bool last){(void)ctx;(void)off;if(load_failed)return false;s_chapter=chapter;s_page=last?book_layout_page_count()-1:0;return true;}
+static void reader_heading_viewport(void){}
 static void set_reader_view(int view){s_view=view;}
 // 目录实现另有真实源测试；这里记录边界失败返回的当前位置。/ TOC has its own source tests; track the failed-turn anchor here.
 static size_t current_toc_position(void){return s_chapter;}

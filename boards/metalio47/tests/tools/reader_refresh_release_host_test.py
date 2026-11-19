@@ -19,7 +19,7 @@ typedef struct {int x,y,width,height;} EpdRect;
 typedef struct {void *hl;uint8_t *fb;int64_t now_ms;bool request_app;} app_ctx_t;
 typedef enum {APP_REDRAW_NONE,APP_REDRAW_AREA,APP_REDRAW_PAGE,APP_REDRAW_FULL,APP_REDRAW_DONE} app_redraw_t;
 enum EpdDrawError {EPD_DRAW_SUCCESS,EPD_DRAW_OTHER_ERROR};
-enum {READING,SHELF,MANAGE,BULK,EDIT,SEARCH,READER_PANEL_NONE,READER_PANEL_BACKGROUND_PREVIEW,READER_PANEL_FONT_SETTINGS,READER_PANEL_ONLINE_FONTS};
+enum {READING,SHELF,MANAGE,BULK,EDIT,SEARCH,TOC,READER_PANEL_NONE,READER_PANEL_BACKGROUND_PREVIEW,READER_PANEL_FONT_SETTINGS,READER_PANEL_ONLINE_FONTS};
 enum {MODE_DU,MODE_GL16,MODE_GC16,APP_PAGE_REFRESH_MODE=MODE_GL16};
 #define UI_LOCK_WIDTH 684
 #define UI_LOCK_HEIGHT 1216
@@ -38,8 +38,12 @@ static int E0470_WAVEFORM,E0470_FULL_WAVEFORM,E0470_FOLLOW_WAVEFORM;
 #define display_main_normal_waveform() (&E0470_WAVEFORM)
 #endif
 typedef int EpdWaveform;
-static int soft_waveform;
-static const int *display_reader_soft_turn_waveform(void){return &soft_waveform;}
+static bool last_image_ripple;
+typedef enum{DISPLAY_READER_GRAY_PAGE,DISPLAY_READER_GRAY_BACKGROUND,DISPLAY_READER_GRAY_IMAGE,DISPLAY_READER_GRAY_NORMALIZE,DISPLAY_READER_GRAY_NORMALIZE_GRAY}display_reader_gray_profile_t;
+static bool closing_panel,last_full;
+static display_reader_gray_profile_t last_profile;
+static bool reader_closing_panel_to_text(void){return closing_panel;}
+
 static struct{bool valid;}s_reader_panel_frame;
 static int s_online_fonts;
 static bool ui_online_fonts_present(int *fonts,app_ctx_t *ctx,app_redraw_t redraw){(void)fonts;(void)ctx;(void)redraw;assert(false);return false;}
@@ -50,6 +54,8 @@ static bool s_reader_image_refresh_pending,s_reader_cleanup,s_reader_turn_pendin
 static bool s_reader_image_frame,s_reader_image_exit_pending,hide_images;
 static int64_t s_reader_footer_due_ms;
 static bool s_toolbar,s_shelf_key_paint_pending,test_panel_short;
+static bool test_toolbar_transition,test_toolbar_crop,test_custom_modal;
+static bool s_toc_content_changed;
 static bool reader_indent_present(app_ctx_t*c,app_redraw_t d){(void)c;(void)d;return false;}
 static int s_view=READING,s_reader_panel,s_mode=MODE_GL16,s_presented_view=READING,s_water_turn_dir,s_page,s_du_count;
 static unsigned s_cover_dirty_mask,s_cover_present_mask;
@@ -57,7 +63,7 @@ static int64_t s_reader_clock_minute,s_reader_clock_painted_minute,s_du_ms;
 static const char *s_text="text";
 static EpdRect s_area={0,0,684,1216},s_du_area;
 static void reader_prefetch_end(bool started){assert(!started);}
-static int calls,selected,fail,rendered,prepares,images,tick;static unsigned s_turns;
+static int calls,selected,fail,rendered,prepares,images,tick,binary_conversions;static unsigned s_turns;
 static bool background,immersive;
 static bool app_settings_reader_immersive(void){return immersive;}
 static int app_settings_reader_turn_effect(void){return tick;}
@@ -74,8 +80,12 @@ static int64_t esp_timer_get_time(void){return 1000000;}
 static bool kick_prep(void){return false;}
 
 static const char *app_settings_book_background_path(void){return background?"wallpaper":"";}
+static display_reader_gray_profile_t reader_sheet_profile(void){return background?DISPLAY_READER_GRAY_BACKGROUND:DISPLAY_READER_GRAY_PAGE;}
+static enum EpdDrawError update_display_reader_gray(void *h,EpdRect a,display_reader_gray_profile_t p,bool full){(void)h;last_gray_area=a;last_full=full;last_profile=p;return push(28);}
+
 static void display_main_transition_cancel(void){}
 static void render(app_ctx_t *ctx,uint8_t *fb){(void)ctx;(void)fb;++rendered;}
+static void ui_image_bw_rect(uint8_t *fb,EpdRect area){(void)fb;assert(area.height==1216);++binary_conversions;}
 static void prepare_covers(app_ctx_t *ctx){(void)ctx;assert(s_view!=READING);}
 static void gather_cover_entry(app_ctx_t *ctx){(void)ctx;assert(s_view!=READING);}
 static void prepare_inline_image(void){++prepares;}
@@ -100,6 +110,9 @@ static enum EpdDrawError update_display_area_full_with(void *h,const int *w,int 
 #define update_display_area_with(...) push(15)
 #define update_display_with(...) push(16)
 #define update_display_mode_diff(...) push(17)
+static enum EpdDrawError update_display_image_turn(void *hl,EpdRect area,int dir,bool ripple){
+ (void)hl;assert(dir==s_water_turn_dir);last_gray_area=area;last_image_ripple=ripple;return push(27);
+}
 static enum EpdDrawError update_display_water_turn(void*hl,EpdRect area,int dir){(void)hl;(void)dir;last_water_area=area;return push(18);}
 #define E0470_TURN_RTL 0
 static enum EpdDrawError update_display_text_turn(void *hl,EpdRect area,int dir){
@@ -109,14 +122,16 @@ static void assert_text_area(void){
  assert(last_text_area.x==0&&last_text_area.y==0&&last_text_area.width==684&&last_text_area.height==1216);
 }
 #define update_display_reader_panel(...) push(21)
-#define update_display_reader_panel_fast(...) push(21)
+#define update_display_reader_panel_fast(...) push(test_toolbar_transition?25:21)
 #define update_display_reader_panel_gray4(...) push(21)
 #define update_display_fast_page(...) push(19)
+#define update_display_toc_page(...) push(26)
 static EpdRect reader_fast_panel_rect(void){return(EpdRect){0};}
 static bool reader_slider_feedback_present(app_ctx_t *ctx,app_redraw_t redraw){(void)ctx;(void)redraw;return false;}
 '''
-unit+='enum {READER_PANEL_TOUCH_SETTINGS=90,READER_PANEL_TOUCH_MORE=91};\nstatic bool s_rc_full_was_visible,s_rc_double_pending;\nstatic bool rc_custom_modal(void){return false;}\nstatic void rc_pause_auto(void){}\nstatic void rc_stop_auto(void){}\nstatic void rc_cancel_side(void){}\n'
+unit+='enum {READER_PANEL_TOUCH_SETTINGS=90,READER_PANEL_TOUCH_MORE=91};\nstatic bool s_rc_full_was_visible,s_rc_double_pending;\nstatic bool rc_custom_modal(void){return test_custom_modal;}\nstatic void rc_pause_auto(void){}\nstatic void rc_stop_auto(void){}\nstatic void rc_cancel_side(void){}\n'
 unit+='static bool reader_panel_short_ready(app_redraw_t r){return test_panel_short&&r==APP_REDRAW_PAGE;}\nstatic bool reader_panel_fast_present(app_ctx_t *ctx,app_redraw_t redraw){(void)ctx;(void)redraw;return false;}\nstatic void reader_panel_record(enum EpdDrawError err){(void)err;}\nstatic bool display_page_prepare_begin(void){return false;}\nstatic void display_page_prepare_end(bool held){(void)held;}\n'
+unit+='static bool reader_toolbar_transition(app_ctx_t *ctx,app_redraw_t r){(void)ctx;return test_toolbar_transition&&r==APP_REDRAW_PAGE;}\nstatic bool reader_toolbar_dirty_area(void *hl,EpdRect *r){(void)hl;*r=(EpdRect){0,576,684,640};return test_toolbar_crop;}\n'
 unit+='\n'.join(line for line in (root/'main/ui/ui_reader_layout.h').read_text().splitlines() if not line.startswith(('#include','#pragma'))) + '\n'
 for name in ('reader_area','reader_fullscreen_progress_area','progress_rect'):
  unit+=function(name,root/'main/apps/app_book.c')+'\n'
@@ -124,12 +139,13 @@ unit+='static enum EpdDrawError reader_present_crop(void *hl,const EpdWaveform *
 unit+=function('reader_soft_present',root/'main/apps/app_book.c')+'\n'
 unit+=function('reader_image_present',root/'main/apps/app_book.c')+'\n'
 unit+='static bool reader_images_hidden(void){return app_settings_reader_hide_images();}\n'
-unit+=function('present_water_turn',root/'main/apps/app_book.c')+'\n'
 unit+=function('present',root/'main/apps/app_book.c')
 unit+=r'''
 static void reset(void){
  memset(&last_text_area,0,sizeof(last_text_area));
- calls=selected=rendered=prepares=fail=images=tick=0;background=test_panel_short=hide_images=immersive=false;s_view=s_presented_view=READING;
+ closing_panel=last_full=false;calls=selected=rendered=prepares=fail=images=tick=0;background=test_panel_short=hide_images=immersive=false;s_view=s_presented_view=READING;
+ test_toolbar_transition=test_toolbar_crop=test_custom_modal=false;
+ s_toc_content_changed=false;
  s_reader_image_frame=s_reader_image_exit_pending=false;
  s_reader_panel=READER_PANEL_NONE;s_mode=MODE_GL16;s_reader_fullscreen=true;
  s_reader_footer_pending=true;s_reader_cleanup=false;s_water_turn_pending=false;s_reader_turn_pending=true;
@@ -137,14 +153,22 @@ static void reset(void){
 }
 int main(void){
  app_ctx_t ctx={0};
- for(unsigned entry=0;entry<2;++entry)for(unsigned img=0;img<2;++img){
-  reset();s_presented_view=entry?SEARCH:SHELF;images=img;background=img;s_turns=9;
-  present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==22&&s_turns==0&&s_presented_view==READING);
-  assert(last_gray_wave==&E0470_FULL_WAVEFORM&&last_gray_mode==MODE_GC16&&last_gray_area.height==1216);
+ reset();s_view=s_presented_view=TOC;s_toc_content_changed=true;
+ present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==26&&rendered==1&&!s_toc_content_changed);
+ present(&ctx,APP_REDRAW_PAGE);assert(calls==2&&selected==19);
+ reset();s_view=TOC;s_toc_content_changed=true;
+ present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==19&&!s_toc_content_changed);
+ reset();s_view=s_presented_view=TOC;s_toc_content_changed=true;
+ present(&ctx,APP_REDRAW_FULL);assert(calls==1&&selected==12&&!s_toc_content_changed);
+ for(unsigned entry=0;entry<3;++entry)for(unsigned img=0;img<2;++img){
+  reset();s_presented_view=entry==0?SHELF:entry==1?SEARCH:TOC;images=img;background=img;s_turns=9;binary_conversions=0;
+  present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==12&&s_turns==0&&s_presented_view==READING);
+  assert(!binary_conversions);
+  calls=0;s_reader_turn_pending=false;present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected!=12);
  }
  reset();s_presented_view=SEARCH;fail=1;s_turns=9;
- present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==22&&s_presented_view==SEARCH&&s_turns==9);
- fail=0;calls=0;present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==22&&s_presented_view==READING);
+ present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==12&&s_presented_view==SEARCH&&s_turns==9);
+ fail=0;calls=0;present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==12&&s_presented_view==READING);
 
  for(int full=0;full<2;++full){
   reset();s_reader_fullscreen=full;s_area=reader_area();s_reader_footer_pending=false;
@@ -166,22 +190,32 @@ int main(void){
   assert(!s_reader_cleanup&&!s_reader_turn_pending);
  }
  reset();s_reader_turn_pending=false;present(&ctx,APP_REDRAW_FULL);assert(calls==1&&selected==12&&rendered==1);
- reset();s_reader_turn_pending=false;present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==17&&rendered==1);
+ reset();s_reader_turn_pending=false;present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==28&&rendered==1);
  reset();s_reader_panel=READER_PANEL_BACKGROUND_PREVIEW;s_reader_turn_pending=s_reader_footer_pending=false;
- present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==13&&rendered==1); // UI does not count as whole-body cleanup
+ present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==28&&rendered==1); // UI does not count as whole-body cleanup
+ for(int crop=0;crop<2;++crop){
+  reset();s_reader_panel=READER_PANEL_FONT_SETTINGS;s_reader_turn_pending=false;
+  test_toolbar_transition=test_custom_modal=true;test_toolbar_crop=crop;
+  assert(present(&ctx,APP_REDRAW_PAGE)&&calls==1&&rendered==1&&selected==28);
+ }
  reset();s_reader_panel=READER_PANEL_FONT_SETTINGS;s_reader_turn_pending=s_reader_footer_pending=false;test_panel_short=true;
- present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==21&&rendered==1);
+ present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==28&&rendered==1);
  reset();s_reader_panel=READER_PANEL_FONT_SETTINGS;s_reader_turn_pending=s_reader_footer_pending=false;test_panel_short=true;
- present(&ctx,APP_REDRAW_AREA);assert(calls==1&&selected==21&&rendered==0); // local UI: no footer replay
+ present(&ctx,APP_REDRAW_AREA);assert(calls==1&&selected==28&&rendered==0); // local UI: no footer replay
+ for(int bg=0;bg<2;++bg){
+  reset();closing_panel=true;background=bg;test_toolbar_transition=true;s_reader_turn_pending=false;
+  present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==28&&last_full);
+  assert(last_profile==(bg?DISPLAY_READER_GRAY_NORMALIZE_GRAY:DISPLAY_READER_GRAY_NORMALIZE));
+ }
  reset();fail=1;s_reader_footer_pending=false;
  present(&ctx,APP_REDRAW_AREA);assert(calls==1&&selected==20&&!s_reader_text_frame);
  reset();s_water_turn_pending=true;s_reader_footer_pending=false;
  present(&ctx,APP_REDRAW_AREA);assert(selected==18&&calls==1&&!s_water_turn_pending);
  for(int full=0;full<2;++full){
   reset();s_reader_fullscreen=full;s_area=reader_area();s_water_turn_pending=true;
-  s_area=(EpdRect){0,160,684,900};
+  s_area=reader_area();
   present(&ctx,APP_REDRAW_AREA);assert(selected==18&&calls==1&&!s_water_turn_pending);
-  assert(last_water_area.x==0&&last_water_area.y==0&&last_water_area.width==684&&last_water_area.height==1216);
+  assert(!memcmp(&last_water_area,&s_area,sizeof(s_area)));
  }
  s_area=(EpdRect){0,0,684,1216};
  reset();fail=1;s_water_turn_pending=true;
@@ -189,10 +223,11 @@ int main(void){
  // 图像始终保留灰阶，进度同轮输出。/ Images retain gray targets with deferred metadata.
  for(int effect=0;effect<3;++effect)for(int full=0;full<2;++full)for(int hide_status=0;hide_status<2;++hide_status)for(int kind=0;kind<3;++kind){
   reset();tick=effect;immersive=hide_status;s_reader_fullscreen=full;s_area=reader_area();s_reader_footer_pending=false;s_reader_turn_pending=false;
-  images=kind!=2;s_reader_image_refresh_pending=images!=0;s_reader_image_exit_pending=kind!=0;
+  images=kind!=2;s_reader_image_refresh_pending=images!=0;s_reader_image_exit_pending=kind!=0;s_water_turn_pending=effect==1;
   present(&ctx,APP_REDRAW_AREA);
-  assert(calls==1&&selected==14);assert(last_gray_wave==&soft_waveform&&last_gray_mode==MODE_GL16);
-  assert(last_gray_area.x==0&&last_gray_area.y==0&&last_gray_area.width==684&&last_gray_area.height==1216);
+  assert(calls==1&&selected==27&&last_image_ripple==(effect==1));
+  if(effect==1)assert(!memcmp(&last_gray_area,&s_area,sizeof(s_area)));
+  else assert(last_gray_area.x==0&&last_gray_area.y==0&&last_gray_area.width==684&&last_gray_area.height==1216);
   assert(s_reader_image_frame==(images!=0)&&s_reader_text_frame==!images&&!s_reader_image_exit_pending);
  }
  // Manual/periodic cleanup takes priority even on image-bearing pages, and never uses a sparse GC mask.
@@ -203,11 +238,11 @@ int main(void){
   if(!kind)assert(last_gray_mode==MODE_GC16&&last_gray_wave==&E0470_FULL_WAVEFORM&&last_gray_area.y==0&&last_gray_area.height==1216);
  }
  reset();images=1;s_reader_image_refresh_pending=true;s_reader_turn_pending=false;
- present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==14&&last_gray_wave==&soft_waveform&&last_gray_mode==MODE_GL16);
+ present(&ctx,APP_REDRAW_PAGE);assert(calls==1&&selected==27&&!last_image_ripple);
  // A failed image/exit output cannot become either displayed-image history or a text-only fast baseline.
  for(int exit=0;exit<2;++exit){
   reset();fail=1;images=!exit;s_reader_image_refresh_pending=!exit;s_reader_image_exit_pending=exit;
-  present(&ctx,APP_REDRAW_AREA);assert(calls==1&&selected==14&&last_gray_wave==&soft_waveform&&!s_reader_image_frame&&!s_reader_text_frame);
+  present(&ctx,APP_REDRAW_AREA);assert(calls==1&&selected==27&&!s_reader_image_frame&&!s_reader_text_frame);
  }
  reset();images=1;hide_images=true;s_reader_turn_pending=false;s_reader_fullscreen=false;s_reader_footer_pending=false;
  present(&ctx,APP_REDRAW_AREA);assert(!s_reader_image_frame);
@@ -215,7 +250,7 @@ int main(void){
  present(&ctx,APP_REDRAW_AREA);assert(calls==0);ctx.request_app=false;
  reset();s_reader_clock_pending=true;s_reader_fullscreen=false;s_reader_turn_pending=false;
  s_reader_clock_painted_minute=321;
- present(&ctx,APP_REDRAW_AREA);assert(calls==1&&selected==13&&s_reader_clock_minute==321&&!s_reader_clock_pending);
+ present(&ctx,APP_REDRAW_AREA);assert(calls==1&&selected==28&&s_reader_clock_minute==321&&!s_reader_clock_pending);
  reset();ctx.request_app=true;present(&ctx,APP_REDRAW_AREA);assert(calls==0);ctx.request_app=false;
  puts("PASS: S31 ordinary soft / FastBW DU / ripple and fused image/exit outputs with deferred metadata; full GC48 cleanup priority, failed-frame history, panels, clock and cancellation guards");
 }

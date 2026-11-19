@@ -18,7 +18,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include "book_cover.h"
-#include "book_cover_auto.h"
+#include "book_weread_cover.h"
 #include "book_epub.h"
 #include "book_progress.h"
 #include "book_title.h"
@@ -41,13 +41,16 @@ static void text_fit(char *text, int px, int width) {
 static uint8_t *cover_load(const char *path, const char *title, const char *author) {
     uint8_t *gray = heap_caps_malloc(BOOK_COVER_W * BOOK_COVER_H,
                                      MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    // The lock screen must not decode a potentially large EPUB while the
-    // power key is being handled; use the shelf's cover cache when available.
-    // 处理电源键时只读书架封面缓存，不在锁屏路径解码大 EPUB。
-    if (!gray || book_cover_load_gray(path, title, author, gray, false, NULL)) return gray;
-    const char *ext = strrchr(path, '.');
-    if (ext && !strcasecmp(ext, ".txt") &&
-        book_auto_cover_render(title, author, BOOK_COVER_W, BOOK_COVER_H, gray)) return gray;
+    if (!gray) return NULL;
+    if (book_weread_cover_is_txt(path)) {
+        if (book_weread_cover_read(path, gray, BOOK_COVER_W, BOOK_COVER_H)) {
+            return gray;
+        }
+        free(gray);
+        return NULL;
+    }
+    // Locks only reuse available EPUB thumbnails to avoid decoding on the power-key path.
+    if (book_cover_load_gray(path, title, author, gray, false, NULL)) return gray;
     free(gray);
     return NULL;
 }
@@ -116,7 +119,7 @@ static void cover_draw(uint8_t *fb, const uint8_t *gray, const char *title) {
                                tone, fb);
             }
     } else {
-        char short_title[96]; snprintf(short_title, sizeof(short_title), "%s", title);
+        char short_title[96]; snprintf(short_title, sizeof(short_title), "%.*s", (int)sizeof(short_title) - 1, title);
         text_fit(short_title, 32, box.width - 20);
         ui_text_vc(fb, box.x + box.width / 2, box.y + box.height / 2, 32,
                    short_title, EPD_DRAW_ALIGN_CENTER, false);

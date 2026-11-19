@@ -150,7 +150,9 @@ for name in ['s_rule_offset_up','s_rule_offset_reset','s_rule_offset_down']:
 for name in ['rule_style_rect','rule_span_rect','draw_rule_settings']:
     unit+=function(name,book)+'\n'
 unit+=function('reader_weight_value',book)+'\n'
-for name in ('rc_done_rect','rc_tab_rect','rc_grid_rect','rc_effect_rect','rc_refresh_rect','rc_auto_card','rc_interval_rect','rc_text','rc_card','rc_done','rc_link','rc_toggle_card','rc_draw_settings'):
+unit += 'static unsigned app_settings_book_heading_style(void){return 0;}\n'
+unit += re.search(r'^static const char \*const rc_heading_styles.*', (ROOT/'main/apps/book_reader_controls_ui.inc').read_text(),re.M)[0].replace('[APP_BOOK_HEADING_COUNT]', '[]')+'\n'
+for name in ('rc_heading_link_rect','rc_done_rect','rc_tab_rect','rc_grid_rect','rc_effect_rect','rc_refresh_rect','rc_auto_card','rc_interval_rect','rc_text','rc_step_button','rc_card','rc_done','rc_link','rc_toggle_card','rc_draw_settings'):
     unit+=function(name,ROOT/'main/apps/book_reader_controls_ui.inc')+'\n'
 unit+=function('draw_font_settings',book)+'\n'+function('draw_reading_settings',book)+'\n'
 

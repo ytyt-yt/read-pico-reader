@@ -76,6 +76,11 @@ static const char *app_settings_book_background_path(void){return background?"wa
 static void display_main_transition_cancel(void){}
 static void render(app_ctx_t *ctx,uint8_t *fb){(void)ctx;(void)fb;++rendered;}
 static void prepare_covers(app_ctx_t *ctx){(void)ctx;assert(s_view!=READING);}
+static void cancel_shelf_open(void) {}
+static void ui_image_bw_rect(uint8_t *fb, EpdRect area) {
+    (void)fb;
+    assert(area.x == 0 && area.y == 0 && area.width == UI_LOCK_WIDTH && area.height == UI_LOCK_HEIGHT);
+}
 static void gather_cover_entry(app_ctx_t *ctx){(void)ctx;assert(s_view!=READING);}
 static void prepare_inline_image(void){++prepares;}
 static bool ui_reader_background_prepare(const char *p){(void)p;return true;}
@@ -192,7 +197,7 @@ int main(void){
   images=content==1;s_reader_image_refresh_pending=images!=0;background=content==2;
   assert(present(&ctx,APP_REDRAW_AREA));
   assert(calls==1&&selected==14&&modes[0]==MODE_GL16&&waves[0]==&soft_turn_waveform&&s_reader_text_frame==(content==0));
-  same_area(areas[0],reader_area());
+  same_area(areas[0],content==1 ? reader_area() : (EpdRect){0,0,684,1216});
   assert(footer_commits==1&&!s_reader_footer_pending&&!s_reader_cleanup);
  }
  for(int full=0;full<2;++full)for(int image=0;image<2;++image){

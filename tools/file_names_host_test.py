@@ -158,7 +158,7 @@ int main(void){
 '''
 with tempfile.TemporaryDirectory() as folder:
     c=Path(folder)/'test.c';b=Path(folder)/'test';c.write_text(unit)
-    (Path(folder)/'esp_err.h').write_text((root/'tools/book_storage_stubs/esp_err.h').read_text()+'\n#define ESP_ERR_INVALID_SIZE 6\n#define ESP_ERR_NOT_SUPPORTED 7\n#define ESP_ERR_NOT_FOUND 8\n#define ESP_ERR_NO_MEM 9\n')
+    (Path(folder)/'esp_err.h').write_text((root/'tools/book_storage_stubs/esp_err.h').read_text()+'\n#define ESP_ERR_NOT_SUPPORTED 10\n#define ESP_ERR_NOT_FOUND 8\n#define ESP_ERR_NO_MEM 9\n')
     (Path(folder)/'nvs.h').write_text((root/'tools/book_storage_stubs/nvs.h').read_text())
     gc=['-Wl,-dead_strip']if sys.platform=='darwin'else['-Wl,--gc-sections']
     subprocess.run(['cc','-std=gnu11','-D_DEFAULT_SOURCE','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-ffunction-sections','-fdata-sections',*gc,'-I'+folder,'-Imain/book','-Imain/apps','-Itools/book_storage_stubs','-Itools/file_tree_stubs',str(c),'main/book/book_title.c','main/apps/file_tree.c','-o',str(b)],cwd=root,check=True)

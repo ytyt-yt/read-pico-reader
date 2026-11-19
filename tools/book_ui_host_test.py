@@ -239,6 +239,9 @@ static delete_retry_t* s_delete_retries;
 static char s_latest_path[288],test_last_path[288];
 static bool s_save_failed;
 static char s_path[288],s_requested_open[288];
+static bool s_shelf_open_queued;
+static bool app_book_request_open(const char *p){return snprintf(s_requested_open,sizeof(s_requested_open),"%s",p)>0;}
+
 static bool s_requested_open_home,s_reader_return_home,s_requested_fullscreen,s_requested_resume_mode;
 static bool app_settings_reader_default_fullscreen(void){return false;}
 static bool app_settings_set_reader_default_fullscreen(bool on){(void)on;return true;}
@@ -262,6 +265,7 @@ static size_t s_jump_offset=SIZE_MAX,s_jump_page;
 static int test_save_error,test_last_error,test_save_calls,test_last_calls;
 static size_t book_layout_page_count(void){return 3;}
 static size_t book_layout_page_start_offset(size_t page){return page*100;}
+static size_t s_part_base;
 static unsigned percent(size_t page){return (unsigned)page*20;}
 static int book_progress_save(const char* p,const book_progress_t* value){(void)p;(void)value;test_save_calls++;return test_save_error;}
 static int book_progress_set_last_path(const char* p){test_last_calls++;if(!test_last_error)snprintf(test_last_path,sizeof(test_last_path),"%s",p);return test_last_error;}
@@ -504,8 +508,8 @@ unit+='static bool s_shelf_recheck_on_return,s_shelf_index_preloaded,s_manage_st
 unit+='static void shelf_cache_save(void){}\nstatic bool shelf_cache_load(app_ctx_t*c,bool all){(void)c;(void)all;return false;}\nstatic bool cover_lookup_resume(void){return false;}\nstatic void cover_lookup_cleanup(void){}\n'
 unit+='static void reader_current_chapter(char*s,size_t n){snprintf(s,n,"Chapter");}\nstatic void book_ticket_note_position(const char*p,const book_progress_t*q,const char*c,bool saved){(void)p;(void)q;(void)c;(void)saved;}\n'
 unit+='static bool app_settings_try_shelf_order(uint8_t order){s_shelf_order=order;return true;}\n'
-for name in ("reader_images_hidden", "inline_ink_gray", "reader_margin_width", "reader_margin_levels", "reader_margin_level_for", "reader_margin_for_level", "slider_index", "reader_margin_input", "reader_area", "reader_fullscreen_progress_area", "body_rect_for_tracking", "body_rect", "progress_rect", "copy_text", "reader_footer_strip_number", "favorite_key", "favorite_read_handle", "shelf_hidden_key", "shelf_hidden_read_handle", "shelf_hidden_load", "shelf_hidden_save", "shelf_display_style", "shelf_rows", "row_rect", "shelf_category_add", "shelf_category_init", "shelf_category_matches", "shelf_category_remember", "shelf_category_restore", "shelf_categories_recount", "shelf_matches", "compare_books", "sort_shelf", "shelf_reserve", "delete_retry_find", "delete_retry_reserve", "delete_retry_discard", "scan_shelf_dir", "shelf_cbz_in_books", "shelf_backfill_visit", "shelf_backfill_read_books", "shelf_progress_load", "scan_shelf", "refresh_cached_progress",
-             "pending_find", "pending_reserve", "pending_restore", "pending_discard", "pending_mark_latest", "pending_drop_invalidated", "pending_flush", "reader_page_offset", "save_progress", "retry_progress", "layout_name", "manage_panel", "manage_rect", "batch_rect", "manage_back_rect", "shelf_manage_rect", "shelf_sort_rect", "shelf_pager_group_rect", "shelf_search_rect", "shelf_search_clear_rect", "bulk_filter_rect", "bulk_nav_rect", "bulk_nav_hit", "bulk_sort_rect", "shelf_sort_menu_rect", "shelf_order_mode", "shelf_order_desc", "shelf_order_apply", "leaves", "selected_count", "clear_selection", "toggle_selection", "bookmark_compact", "search_begin", "refresh_search_matches", "search_finish", "shelf_search_clear", "refresh_capacity", "manage_apply", "manage_action", "batch_apply", "batch_action", "bulk_turn_page", "bulk_finish", "bulk_select_row", "bulk_action", "bulk_control_at", "menu_handle_enabled", "reader_manual_refresh", "apply_reader_option", "reader_return", "reader_key_action", "import_finish", "shelf_sort_gesture", "on_key", "on_key_long", "draw_wrapped_name", "open_requested_book", "on_enter", "book_on_exit"):
+for name in ("reader_images_hidden", "inline_ink_gray", "reader_margin_width", "reader_margin_levels", "reader_margin_level_for", "reader_margin_for_level", "slider_index", "reader_margin_input", "reader_area", "reader_fullscreen_progress_area", "body_rect_for_tracking", "body_rect", "progress_rect", "copy_text", "queue_shelf_open", "cancel_shelf_open", "reader_footer_strip_number", "favorite_key", "favorite_read_handle", "shelf_hidden_key", "shelf_hidden_read_handle", "shelf_hidden_load", "shelf_hidden_save", "shelf_display_style", "shelf_rows", "row_rect", "shelf_category_add", "shelf_category_init", "shelf_category_matches", "shelf_category_remember", "shelf_category_restore", "shelf_categories_recount", "shelf_matches", "compare_books", "sort_shelf", "shelf_reserve", "delete_retry_find", "delete_retry_reserve", "delete_retry_discard", "scan_shelf_dir", "shelf_cbz_in_books", "shelf_backfill_visit", "shelf_backfill_read_books", "shelf_progress_load", "scan_shelf", "refresh_cached_progress",
+             "pending_find", "pending_reserve", "pending_restore", "pending_discard", "pending_mark_latest", "pending_drop_invalidated", "pending_flush", "reader_page_offset", "reader_saved_offset", "save_progress", "retry_progress", "layout_name", "manage_panel", "manage_rect", "batch_rect", "manage_back_rect", "shelf_manage_rect", "shelf_sort_rect", "shelf_pager_group_rect", "shelf_search_rect", "shelf_search_clear_rect", "bulk_filter_rect", "bulk_nav_rect", "bulk_nav_hit", "bulk_sort_rect", "shelf_sort_menu_rect", "shelf_order_mode", "shelf_order_desc", "shelf_order_apply", "leaves", "selected_count", "clear_selection", "toggle_selection", "bookmark_compact", "search_begin", "refresh_search_matches", "search_finish", "shelf_search_clear", "refresh_capacity", "manage_apply", "manage_action", "batch_apply", "batch_action", "bulk_turn_page", "bulk_finish", "bulk_select_row", "bulk_action", "bulk_control_at", "menu_handle_enabled", "reader_manual_refresh", "apply_reader_option", "reader_return", "reader_key_action", "import_finish", "shelf_sort_gesture", "on_key", "on_key_long", "draw_wrapped_name", "open_requested_book", "on_enter", "book_on_exit"):
     unit += function(name) + "\n"
 for name in ("book_remote_direction", "shelf_turn_page", "shelf_page_arrow_rect", "reader_swipe_direction"):
     unit += function(name) + "\n"
@@ -651,7 +655,7 @@ int main(void) {
     reader_footer_strip_number(footer_name,sizeof(footer_name),"扉页");
     assert(!strcmp(footer_name,"扉页"));
     reader_footer_strip_number(footer_name,sizeof(footer_name),"第1章");
-    assert(!strcmp(footer_name,""));
+    assert(!strcmp(footer_name,"第1章"));
     s_jump_page=1;s_jump_offset=145;
     assert(reader_page_offset(1)==145&&reader_page_offset(2)==200);
     s_jump_offset=SIZE_MAX;
@@ -768,7 +772,10 @@ int main(void) {
     EpdRect entry=row_rect(0),hit;
     assert(bulk_control_at(&ctx,entry.x+10,entry.y+10,&hit)==0);
     int opening_calls=test_open_calls;
-    assert(bulk_action(&ctx,entry.x+10,entry.y+10)==APP_REDRAW_PAGE&&s_view==READING&&test_open_calls==opening_calls+1&&!selected_count());
+    assert(bulk_action(&ctx,entry.x+10,entry.y+10)==APP_REDRAW_NONE&&s_shelf_open_queued);
+    assert(s_view==BULK&&test_open_calls==opening_calls&&!selected_count());
+    s_shelf_open_queued=false;
+    assert(open_requested_book(&ctx)&&s_view==READING&&test_open_calls==opening_calls+1);
     s_view=BULK;
     EpdRect hidden_action=batch_rect(3);
     assert(batch_action(&ctx,hidden_action.x+10,hidden_action.y+10)==APP_REDRAW_NONE&&!s_batch_confirm);
@@ -936,7 +943,7 @@ int main(void) {
     s_view=READING;test_nav_target=-1;s_text="body";
     assert(on_key_long(&ctx,UI_KEY_2)==APP_REDRAW_FULL&&test_nav_target==-1&&s_view==READING);
     // 屏幕返回仍回来源，中键长按始终全刷。/ Screen back returns to source; middle holds always refresh.
-    assert(reader_return(&ctx)==APP_REDRAW_PAGE&&s_view==SHELF);
+    assert(reader_return(&ctx)==APP_REDRAW_FULL&&s_view==SHELF);
     s_view=READING;s_text="text";s_reader_fullscreen=true;test_hold_refresh=true;test_nav_target=-1;
     s_reader_return_home=true;s_reader_panel=READER_PANEL_TOOLS;s_reader_slider=0;
     s_reader_footer_pending=s_reader_image_refresh_pending=s_water_turn_pending=s_reader_cleanup=true;
@@ -962,7 +969,7 @@ int main(void) {
     assert(body_rect().x==0&&body_rect().width==UI_LOCK_WIDTH&&body_rect().height==reader_area().height);
     source_kind=0;test_hide_images=false;
     test_hold_action=APP_READER_KEY_HOME;test_nav_target=-1;
-    assert(on_key_long(&ctx,UI_KEY_2)==APP_REDRAW_PAGE && test_nav_target==-1 && s_view==SHELF);
+    assert(on_key_long(&ctx,UI_KEY_2)==APP_REDRAW_FULL && test_nav_target==-1 && s_view==SHELF);
     s_view=READING;s_reader_return_home=true;
     assert(on_key_long(&ctx,UI_KEY_2)==APP_REDRAW_NONE && test_nav_target==0);
     test_hold_action=APP_READER_KEY_REFRESH;

@@ -22,7 +22,9 @@ unit = r'''
 #include <string.h>
 typedef struct {int x,y,width,height;} EpdRect;
 typedef struct {int leaf;int64_t now_ms;int request_app;} app_ctx_t;
-typedef enum {APP_REDRAW_NONE,APP_REDRAW_AREA,APP_REDRAW_PAGE} app_redraw_t;
+static bool s_shelf_open_queued, s_part_more;
+static size_t s_part_base, s_text_len;
+typedef enum {APP_REDRAW_NONE,APP_REDRAW_AREA,APP_REDRAW_PAGE,APP_REDRAW_FULL} app_redraw_t;
 enum {READING,TOC,SHELF,READER_PANEL_NONE,READER_PANEL_TOOLS,MODE_GL16,BOOK_KIND_TXT=0,BOOK_KIND_CBZ=99};
 #define UI_NAV_COMICS 5
 #define BOOK_TOC_ROWS 7
@@ -108,7 +110,7 @@ for name in ("comic_return", "comic_open_chapter", "current_toc_position", "comi
 unit += r'''
 static void reset(app_ctx_t *ctx,size_t index,size_t chapter){
  s_comic_active=true;s_comic_index=index;s_chapter=chapter;s_page=0;s_text="comic";ctx->request_app=0;s_unsaved=0;paused=true;
- s_reader_body_frame=true;s_reader_return_home=false;s_reader_fullscreen=true;s_reader_panel=READER_PANEL_NONE;s_reader_notice[0]=0;s_comic_open_position=0;
+ s_reader_body_frame=true;s_reader_image_frame=true;s_reader_return_home=false;s_reader_fullscreen=true;s_reader_panel=READER_PANEL_NONE;s_reader_notice[0]=0;s_comic_open_position=0;
 }
 int main(void){app_ctx_t ctx={.now_ms=1000};
  assert(app_book_request_comic("/sdcard/comics/Series/2.cbz",3)&&s_requested_comic&&s_requested_comic_page==3);

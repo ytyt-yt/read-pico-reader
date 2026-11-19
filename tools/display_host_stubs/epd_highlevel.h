@@ -14,4 +14,5 @@ enum EpdDrawError epd_hl_update_area_diff_exact(EpdiyHighlevelState *state, enum
 enum EpdDrawError epd_hl_update_area_full_exact(EpdiyHighlevelState *state, enum EpdDrawMode mode, int temperature, EpdRect area);
 enum EpdDrawError epd_hl_update_area_full(EpdiyHighlevelState*, enum EpdDrawMode, int, EpdRect);
 
+enum EpdDrawError epd_hl_update_area_padded(EpdiyHighlevelState*, enum EpdDrawMode, int, EpdRect, int, int);
 enum EpdDrawError epd_hl_update_area_strict(EpdiyHighlevelState*, enum EpdDrawMode, int, EpdRect, bool);
