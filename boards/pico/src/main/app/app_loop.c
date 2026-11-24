@@ -98,7 +98,7 @@
 
 // 触摸芯片报点率远高于屏幕，主循环空转一轮只等这么久。
 // Touch reports far faster than the panel; idle this long per loop.
-#define LOOP_TICK_MS 5
+#define LOOP_TICK_MS 2
 // SD 卡插上或者刚挂好时，隔一会儿再试一次存在设置里的字体。
 // Retry the saved SD font shortly after a card appears or mounts.
 #define FONT_RETRY_INTERVAL_MS 750
@@ -621,6 +621,7 @@ static bool poll_media(app_ctx_t* ctx, const app_desc_t* current,
         if (probe == ESP_ERR_NOT_FINISHED) return false;
     }
     if (err == ESP_ERR_NOT_FINISHED) return false;
+    if ((err != ESP_OK || !info.mounted) && app_sleep_media_settling()) return false;
     bool ready = err == ESP_OK && info.mounted;
     bool lost = *mounted && !ready;
     bool gained = !*mounted && ready;
@@ -648,7 +649,7 @@ static bool poll_media(app_ctx_t* ctx, const app_desc_t* current,
 // Save the current page first, then settle a clock-free static frame so shutdown never leaves a misleading frozen time.
 // 锁屏前先由页面保存进度，再持久化一次恢复上下文；不在翻页或点击时写入。
 // Flush page progress before persisting one lock checkpoint; never write it on page turns or taps.
-static void prepare_lock(app_ctx_t *ctx, const app_desc_t *current, bool feedback) {
+static bool prepare_lock(app_ctx_t *ctx, const app_desc_t *current, bool feedback) {
     app_book_shelf_prefetch_cancel();
     if (feedback) app_lock_feedback(ctx->hl);
     if (current->on_before_lock) current->on_before_lock(ctx);
@@ -660,19 +661,30 @@ static void prepare_lock(app_ctx_t *ctx, const app_desc_t *current, bool feedbac
         resume.fullscreen = fullscreen;
     }
     if (tab == UI_NAV_COMICS) (void)app_comics_resume_context(resume.path, sizeof(resume.path));
-    (void)pico_boot_save_resume(&resume);
+    const bool position_ready = current != &app_book || app_book_checkpoint_ready();
+    const bool checkpoint_ready = pico_boot_save_resume(&resume) == ESP_OK;
+    app_lock_set_resume_ready(position_ready && checkpoint_ready);
+    return position_ready && checkpoint_ready;
 }
 static void run_power_action(app_ctx_t *ctx, const app_desc_t *current, bool restart) {
-    prepare_lock(ctx, current, false);
+    if (!prepare_lock(ctx, current, false)) {
+        ESP_LOGW(TAG, "power-off deferred: current position or resume checkpoint not saved");
+        app_present(ctx, current, APP_REDRAW_PAGE);
+        return;
+    }
     ui_power_final_draw(ctx->fb, restart);
     guard_draw_result(ctx->hl, update_display_full(ctx->hl));
     app_lock_wait_key_idle(800);
     epd_poweroff();
+    // 电源动作前清掉恢复记录：重启/关机应从主页冷启动，而不是恢复成锁屏或上次页面。
+    // Clear the resume record before the handoff so restart or power-off boots cold to Home
+    // instead of resuming the lock screen or the previous page.
     pico_boot_clear_resume();
     if (restart) app_restart_host();
     esp_err_t error = app_enter_host_sleep(APP_SLEEP_OFF);
     if (error != ESP_OK) ESP_LOGW(TAG, "power off failed: %s", esp_err_to_name(error));
     // 关机交接失败时回到可操作原页；不关闭书籍后再重新自动开书。/ A failed shutdown returns to the operable current page without closing/reopening the book.
+    pico_boot_clear_resume();
     app_present(ctx, current, APP_REDRAW_PAGE);
 }
 
@@ -789,6 +801,16 @@ void app_loop_run(const app_loop_config_t* config) {
         }
         cst836u_touch_t touch = { 0 };
         esp_err_t err = cst836u_read(config->tp, &touch);
+        // 一轮补采两次：主循环被渲染/存储拖长时，短促点击不会落在两次采样之间。
+        // Two extra reads per loop: a short tap cannot fall between samples when rendering or
+        // storage work stretches the iteration.
+        for (int extra = 0; extra < 2; ++extra) {
+            cst836u_touch_t again = { 0 };
+            if (cst836u_read(config->tp, &again) == ESP_OK && again.touched && !touch.touched) {
+                touch = again;
+                err = ESP_OK;
+            }
+        }
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "CST836U read failed: %s", esp_err_to_name(err));
             memset(&touch, 0, sizeof(touch));

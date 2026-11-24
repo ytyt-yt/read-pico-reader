@@ -34,7 +34,8 @@ enum {READING,TOC,SHELF,READER_PANEL_NONE,READER_PANEL_TOOLS};
 #define E0470_TURN_LTR -1
 #define ESP_LOGI(...) ((void)0)
 static char s_requested_open[288];
-static bool s_requested_fullscreen=true,s_requested_open_home,s_requested_resume_mode;
+static int64_t s_resume_media_deadline_ms;
+static bool s_requested_fullscreen=true,s_requested_open_home,s_requested_resume_mode,s_shelf_open_queued;
 static bool default_fullscreen;
 static bool app_settings_reader_default_fullscreen(void){return default_fullscreen;}
 // Real reader_zoom_reset dependencies: keep its cleanup in the exercised turn path.
@@ -46,7 +47,12 @@ static uint32_t s_image_zoom_start_distance;
 static uint8_t *s_zoom_bits;
 static struct {bool pending;} s_reader_tap;
 static const char *s_text="text";
-static size_t s_text_len=900,s_block_count,s_chapter,s_page,s_jump_offset;
+static size_t s_text_len=900,s_block_count,s_chapter,s_page,s_jump_offset,s_part_base;
+static bool s_part_more;
+static bool from_image_frame __attribute__((unused));
+static bool s_reader_image_frame __attribute__((unused)),s_reader_image_exit_pending __attribute__((unused));
+static int s_turn_direction __attribute__((unused));
+static char s_reader_notice[128];static int64_t s_reader_notice_until;
 typedef struct {int image;unsigned image_width,image_height;} blk_t;
 static blk_t *s_blocks;
 static int s_px=48,s_reader_panel=READER_PANEL_NONE,s_reader_slider=-1,s_view=READING;
@@ -55,7 +61,6 @@ static bool s_reader_fullscreen,s_clear_confirm,s_reader_text_frame,s_reader_bod
 static bool s_water_turn_pending,s_reader_cleanup,draw_locked,load_failed;
 static int s_water_turn_dir;
 static unsigned s_stats_pending_turns,s_session_turns,s_turns,s_unsaved;
-static void ticket_count_turn(void){++s_stats_pending_turns;++s_session_turns;}
 static int64_t s_last_turn_ms,s_stats_activity_ms;
 static bool s_save_failed;
 static char s_message[128];
@@ -106,6 +111,10 @@ static bool book_layout_build_blocks(const char *text,size_t len,const void *blo
 static void release_page_images(void){}
 static void prepare_inline_image(void){}
 static void save_progress(void){++saves;}
+// Chapter geometry is verified with the real paginator in reader_chapter_viewport_host_test.
+#define READER_TICKET_DAY_MS UINT64_C(86400000)
+static uint64_t book_ticket_local_time_ms(void){return 0;}
+static void ticket_add(uint32_t day,uint32_t ms,uint32_t turns){(void)day;assert(!ms);s_stats_pending_turns+=turns;}
 static void free_book(void){assert(!draw_locked);s_text=NULL;}
 static size_t book_chapter_count(void){return 2;}
 static bool load_chapter(app_ctx_t *ctx,size_t chapter,int off,bool last){(void)ctx;(void)off;if(load_failed)return false;s_chapter=chapter;s_page=last?book_layout_page_count()-1:0;return true;}
@@ -142,6 +151,7 @@ static void book_comic_cache_pause(void){}
 static int app_comics_saved_page(const char *path){(void)path;return -1;}
 """
 unit+='static bool s_rc_auto_turning,s_rc_auto_waiting;\nstatic reader_auto_clock_t s_rc_auto;\n'+function('rc_pause_auto',ROOT/'main/apps/book_reader_controls_runtime.inc')+'\n'
+unit += function('ticket_count_turn',ROOT/'main/apps/book_ticket_reader.inc')+'\n'
 unit += function('apply_reader_indent', BOOK) + '\n'
 for name in ('reader_images_hidden', 'reader_zoom_reset', 'app_book_request_open', 'app_book_request_open_from_home', 'app_book_request_resume',
              'toggle_reader_fullscreen', 'apply_reader_option', 'reader_turn_chrome', 'turn_page'):
@@ -193,7 +203,7 @@ int main(void){
  assert(app_book_request_resume("/sdcard/book.epub",false)&&!s_requested_fullscreen&&s_requested_resume_mode);
  default_fullscreen=false;
  assert(!app_book_request_open(NULL)&&!app_book_request_open(""));
- for(effect=1;effect<=3;effect+=2)
+ for(effect=1;effect<=4;effect+=3)
  for(int full=0;full<2;++full)for(int tools=0;tools<2;++tools)for(int dir=-1;dir<=1;dir+=2){
   reset(full,tools,2,0);size_t destination=book_layout_page_start_offset(s_page+dir);
   s_zoom_bits=malloc(32);assert(s_zoom_bits);s_zoom_bits_bytes=32;

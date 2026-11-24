@@ -4,6 +4,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include "book_cover.h"
+#include "tjpgd.h"
+// 模拟 ESP32-S3 ROM 里 2012 年版 TJpgDec：只接受三分量 YCbCr，灰度 JPEG 返回 JDR_FMT3。
+// Emulate the 2012 TJpgDec in the ESP32-S3 ROM, which accepts three-component YCbCr only and
+// rejects grayscale JPEGs with JDR_FMT3.
+JRESULT host_rom_jd_prepare(JDEC *jd, size_t (*in)(JDEC *, uint8_t *, size_t), void *pool, size_t size, void *dev) {
+    JRESULT result = jd_prepare(jd, in, pool, size, dev);
+    return result == JDR_OK && jd->ncomp != 3 ? JDR_FMT3 : result;
+}
 static unsigned polls, cancel_at;
 static bool active(void) { return ++polls < cancel_at; }
 int main(int argc, char **argv) {

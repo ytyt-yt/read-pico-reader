@@ -36,6 +36,9 @@ enum {SETTINGS_MAIN,SETTINGS_POWER_SLEEP,SETTINGS_AUTO_LOCK,SETTINGS_SYSTEM_FONT
 static int s_page=SETTINGS_MAIN,s_font_page;static char s_notice[96];
 static bool home_full;
 static void ttf_font_scan(void){}
+static bool s_lowghost_dialog,lowghost;
+static bool app_settings_low_ghost(void){return lowghost;}
+static void app_settings_set_low_ghost(bool on){lowghost=on;}
 static bool app_settings_home_full_refresh(void){return home_full;}
 static void app_settings_set_home_full_refresh(bool on){home_full=on;}
 '''
@@ -91,7 +94,7 @@ int main(void){
  reload_wake(true,2);assert(app_settings_wake_presses()==2);
  reload_wake(true,1);assert(app_settings_wake_presses()==1);
  for(unsigned i=0;i<256;i++)if(i!=1&&i!=2){reload_wake(true,i);assert(app_settings_wake_presses()==1);}
- assert(SETTINGS_DISPLAY_ROWS==8);
+ assert(SETTINGS_DISPLAY_ROWS==9);
  const int top=SETTINGS_DISPLAY_Y+5*SETTINGS_ROW_H,scroll=500;
  assert(setting_tap(36,top-scroll,scroll)==APP_REDRAW_PAGE&&s_wake_presses==2&&s_page==SETTINGS_MAIN);
  assert(setting_tap(647,top+SETTINGS_ROW_H-1-scroll,scroll)==APP_REDRAW_PAGE&&s_wake_presses==1&&s_page==SETTINGS_MAIN);

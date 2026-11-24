@@ -54,6 +54,11 @@ def main():
             # Upstream JPEGDEC intentionally uses unaligned loads and signed shifts;
             # retain ASan there, and full UB checks in the new file/stream wrappers.
             upstream_flags = ["-fno-sanitize=alignment,shift"] if source.endswith("JPEGDEC.cpp") else []
+            # 让被测解码路径像设备上一样拒绝灰度 JPEG，验证 JPEGDEC 兜底。
+            # Make the decoder under test reject grayscale JPEGs as on the device, exercising the JPEGDEC fallback.
+            if source.endswith("book_cover.c"):
+                upstream_flags += ["-Djd_prepare=host_rom_jd_prepare",
+                                   "-include", str(ROOT / "tools/book_epub_stubs/esp_log.h")]
             subprocess.run(["c++" if cpp else "cc", "-std=c++17" if cpp else "-std=c11", *flags, *upstream_flags,
                             "-c", str(ROOT / source), "-o", str(obj)], check=True)
             objects.append(str(obj))
@@ -68,7 +73,12 @@ def main():
         Image.new("RGB", (829, 731), (160, 160, 160)).save(work / "odd.jpg")
         Image.new("RGB", (53, 41), (160, 160, 160)).save(work / "small.jpg", progressive=True)
         Image.new("L", (176, 240), 160).save(work / "direct.png")
-        files = [work / name for name in ("large.jpg", "large.png", "progressive.jpg", "odd.jpg", "small.jpg", "direct.png")]
+        # 单分量灰度基线 JPEG：小图标与较大的非整除尺寸各一张。
+        # Single-component grayscale baseline JPEGs: a small icon and a larger odd-sized image.
+        Image.linear_gradient("L").resize((100, 100)).save(work / "gray-icon.jpg", quality=90)
+        Image.frombytes("L", (829, 731), random.Random(7).randbytes(829 * 731)).save(work / "gray-odd.jpg", quality=90)
+        files = [work / name for name in ("large.jpg", "large.png", "progressive.jpg", "odd.jpg", "small.jpg",
+                                          "gray-icon.jpg", "gray-odd.jpg", "direct.png")]
         assert all(path.stat().st_size > 2 * 1024 * 1024 for path in files[:3])
         subprocess.run([str(exe), "read", *map(str, files)], check=True)
         (work / "bad.jpg").write_bytes(b"not an image")
@@ -77,7 +87,7 @@ def main():
             file.write((work / "odd.jpg").read_bytes())
             file.truncate(50 * 1024 * 1024 + 1)
         subprocess.run([str(exe), "reject", *map(str, [work / "bad.jpg", work / "bad.png", work / "overlimit.jpg"])], check=True)
-        print("PASS: streaming baseline/progressive JPEG and PNG over 2 MiB; mid-decode cancellation/retry; odd/small/direct-gray dimensions; corruption/limit bounds")
+        print("PASS: streaming baseline/progressive/grayscale JPEG and PNG over 2 MiB; mid-decode cancellation/retry; odd/small/direct-gray dimensions; corruption/limit bounds")
 
 if __name__ == "__main__":
     main()

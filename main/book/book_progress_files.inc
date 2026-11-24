@@ -93,7 +93,18 @@ static esp_err_t disk_write(const char *key, const uint8_t *data, size_t len) {
     unsigned slot = 1 - active;
     char path[PROGRESS_FILE_MAX];
     slot_path(path, key, slot);
-    FILE *file = fopen(path, "wb");
+    // 长度相同时原地覆盖：FAT 建在 4 KB 磨损均衡扇区上，"wb" 先截断再重新分配会多重写数个扇区，
+    // 使一次保存从约 0.15 s 变成约 0.5 s。长度不同或文件不存在时仍整文件重写。
+    // Overwrite in place when the size matches: FAT sits on 4 KB wear-levelled sectors, and "wb"
+    // truncates and reallocates, rewriting several extra sectors (about 0.5 s instead of 0.15 s per save).
+    // A different size or a missing file still rewrites the whole file.
+    FILE *file = fopen(path, "r+b");
+    if (file && (fseek(file, 0, SEEK_END) != 0 || ftell(file) != (long)(len + 4) ||
+                 fseek(file, 0, SEEK_SET) != 0)) {
+        fclose(file);
+        file = NULL;
+    }
+    if (!file) file = fopen(path, "wb");
     if (!file) return ESP_FAIL;
     uint8_t seal[4];
     put32(seal, record_seal(data, len));
@@ -185,10 +196,19 @@ void book_progress_prepare(void) {
 }
 
 void book_progress_prepare_at_boot(void) {
+    // 进度已移出NVS，空闲条目多也必须在显示/字体大分配前保留文件系统资源。
+    // Progress lives in files even when NVS has space; mount before large display/font allocations.
+    esp_err_t err = book_progress_prepare_storage();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "progress storage startup: %s", esp_err_to_name(err));
+        return;
+    }
     nvs_stats_t stats;
     if (nvs_get_stats(NULL, &stats) == ESP_OK && stats.available_entries < 64)
         book_progress_prepare();
 }
+
+esp_err_t book_progress_prepare_storage(void) { return disk_prepare(); }
 
 esp_err_t book_progress_restore_record(const char *key, const uint8_t *data, size_t len) {
     return progress_key_matches(key, data, len) ? disk_write(key, data, len) : ESP_ERR_INVALID_ARG;

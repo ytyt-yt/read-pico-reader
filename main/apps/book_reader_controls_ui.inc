@@ -15,12 +15,26 @@ static bool rc_heading_back_hit(int x, int y) {
 }
 static const char *const rc_heading_styles[APP_BOOK_HEADING_COUNT] = {"粗竖线","扉页横线","阶梯题头","章号侧栏"};
 static const char *const rc_heading_aligns[APP_BOOK_HEADING_ALIGN_COUNT] = {"居中","左对齐","右对齐"};
-static EpdRect rc_effect_rect(int i) {
-#if KIIKO_BOARD_METALIO47
-    return (EpdRect){36+i*208,786,196,68};
-#else
-    return (EpdRect){36+i*157,786,141,68};
+#include "kiiko_board_config.h"
+#ifndef RC_EFFECT_COUNT
+#define RC_EFFECT_COUNT (KIIKO_BOARD_METALIO47 ? 3 : 4)
 #endif
+static unsigned rc_effect_id(unsigned index) {
+    static const unsigned pico_modes[] = {0, 1, 4, 3};
+    return KIIKO_BOARD_METALIO47 ? index : pico_modes[index];
+}
+static const char *rc_effect_name(unsigned index) {
+    const char *const names[] = {"普通", "水波纹", KIIKO_BOARD_METALIO47 ? "速读黑白" : "清晰水波纹", "快速"};
+    return names[index < RC_EFFECT_COUNT ? index : 0];
+}
+static unsigned rc_effect_next(unsigned effect) {
+    for (unsigned i = 0; i < RC_EFFECT_COUNT; ++i)
+        if (rc_effect_id(i) == effect) return rc_effect_id((i + 1) % RC_EFFECT_COUNT);
+    return 0;
+}
+static EpdRect rc_effect_rect(int i) {
+    const int w = (612 - 12 * (RC_EFFECT_COUNT - 1)) / RC_EFFECT_COUNT;
+    return (EpdRect){36 + i * (w + 12), 786, w, 68};
 }
 static EpdRect rc_refresh_rect(void) { return (EpdRect){36,882,612,84}; }
 static EpdRect rc_auto_card(int column) { return (EpdRect){36+column*314,994,298,126}; }
@@ -85,15 +99,8 @@ static void rc_draw_settings(uint8_t*fb){
         rc_link(fb,rc_heading_link_rect(),"章节题头",rc_heading_styles[app_settings_book_heading_style()]);
     }else if(s_rc_tab==1){
         rc_text(fb,(EpdRect){42,746,590,30},21,"翻页效果",false,false);
-#if KIIKO_BOARD_METALIO47
-        const char*const effects[]={"普通","水波纹","速读黑白"};
-        const uint8_t modes[]={0,1,2};
-#else
-        const char*const effects[]={"普通","水波纹","清晰水波纹","速读黑白"};
-        const uint8_t modes[]={0,1,3,2};
-#endif
-        for(unsigned i=0;i<sizeof(modes);++i){EpdRect r=rc_effect_rect(i);bool on=app_settings_reader_turn_effect()==modes[i];
-            ui_fill_round_rect(fb,r,17,on?UI_GRAY_BLACK:0xf0);ui_draw_control_frame(fb,r,17,on?UI_GRAY_BLACK:0x98);rc_text(fb,r,22,effects[i],true,on);}
+        for(int i=0;i<RC_EFFECT_COUNT;++i){EpdRect r=rc_effect_rect(i);bool on=app_settings_reader_turn_effect()==rc_effect_id(i);
+            ui_fill_round_rect(fb,r,17,on?UI_GRAY_BLACK:0xf0);ui_draw_control_frame(fb,r,17,on?UI_GRAY_BLACK:0x98);rc_text(fb,r,22,rc_effect_name(i),true,on);}
         char value[24];unsigned full=app_settings_reader_full_pages();if(full)snprintf(value,sizeof(value),"每 %u 页",full);else snprintf(value,sizeof(value),"不强制");
         rc_link(fb,rc_refresh_rect(),"全刷间隔",value);
         rc_toggle_card(fb,rc_auto_card(0),"自动翻页",s_rc_auto.running);

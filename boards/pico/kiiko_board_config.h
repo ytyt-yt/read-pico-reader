@@ -57,8 +57,9 @@
 /// 锁屏待机方式（浅睡 / 深睡 / 关机）三档：Metalio 独有；Pico 的待机由 PMU 决定。
 /// Lock-face standby policy (light/deep/off): Metalio only; the Pico PMU decides standby.
 #define KIIKO_BOARD_HAS_LOCK_SLEEP_POLICY 0
-/// Pico另有独立清晰水波纹，旧0/1/2编号保持。/ Pico adds separate Clear ripple; retain existing0/1/2 IDs.
-#define KIIKO_BOARD_READER_TURN_EFFECT_MAX 3
+/// Pico 的快速灰阶为 3，清晰水波纹为 4；S31 保留 2 速读黑白。
+/// Pico uses 3 for fast gray and 4 for Clear ripple. S31 retains 2 for Fast BW.
+#define KIIKO_BOARD_READER_TURN_EFFECT_MAX 4
 
 /* ---- 备份与设备名 / Backup and device name ---- */
 /// 设置备份文件名前缀与默认设备名；升级后要与本机旧固件的取值一致，否则备份认不出来。

@@ -53,6 +53,7 @@ static bool s_scroll_drag_consumed,s_scroll_present_pending;
 static unsigned glass,acrylic,headers,footers,cards,titles;
 static int settings_viewport_end(void){return viewport;}
 static int settings_content_end(void){return viewport;}
+static bool s_import_candidates;
 static int app_settings_shelf_style(void){return style;}
 static void app_settings_set_shelf_style(uint8_t v){style=v;}
 static void settings_prepare_profile(void){}

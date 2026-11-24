@@ -6,8 +6,8 @@
  * Built on the MindReset Read Pico E0470 waveform and refresh path.
  * 错相揭页引擎。应用只依赖本公开接口，不依赖条带或 LUT 的内部布局。
  * Staggered page-turn engine. Applications depend on this public API, not the internal band or LUT layout.
- * 用户最新指定阅读与主页均用8带、11090us节拍；保留各自灰阶序列，原错开启动接口仍可用。
- * Latest user request: reader and main pages use eight bands at 11090us with distinct gray sequences, retaining the spaced-launch API.
+ * 主页及通用入口保留8带、11090us节拍；S31阅读由板级出口选择四带尾合并，原错开启动接口仍可用。
+ * Main/generic outlets retain eight bands at11090us; the S31 reader selects four bands with a paired tail in its board outlet, retaining the spaced-launch API.
  */
 
 #pragma once
@@ -68,6 +68,12 @@ enum EpdDrawError e0470_reader_ripple_with_waveform(
     EpdiyHighlevelState* hl, EpdRect area, e0470_turn_dir_t dir,
     const EpdWaveform* waveform, unsigned bands
 );
+/// Explicit reader launch spacing in ticks; 1..8, with the same final-pair grouping.
+enum EpdDrawError e0470_reader_ripple_with_waveform_timed(
+    EpdiyHighlevelState* hl, EpdRect area, e0470_turn_dir_t dir,
+    const EpdWaveform* waveform, unsigned bands, unsigned launch_ticks
+);
+
 
 /// S31普通文字单带：一次提交整轮，复用内部LUT；仅跳过实际全保持前导相，保留一相准备及所有有效/尾相。
 /// S31 single-band text: batch through the internal LUT; omit only actual all-hold leading phases, retaining one setup phase and every active/tail phase.

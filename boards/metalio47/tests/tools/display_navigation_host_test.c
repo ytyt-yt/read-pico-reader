@@ -29,6 +29,7 @@ static const EpdWaveform shelf37_soft={12},shelf37_art={13};
 static bool shelf37_enabled;
 static const EpdWaveform water37={15};
 static bool water37_enabled;
+const EpdWaveform* display_reader_ripple_waveform(display_reader_gray_profile_t profile){(void)profile;return &water37;}
 const EpdWaveform* display_reader_panel37_waveform(void){return water37_enabled?&water37:NULL;}
 const EpdWaveform* display_ui37_waveform(void){return water37_enabled?&water37:NULL;}
 static int shelf37_regions;
@@ -143,6 +144,10 @@ int e0470_page_turn_tick_us(void){return turn_tick_us;}
 enum EpdDrawError e0470_reader_ripple_with_waveform(EpdiyHighlevelState* hl,EpdRect area,
     e0470_turn_dir_t dir,const EpdWaveform* waveform,unsigned bands) {
     return e0470_page_turn_with_waveform_compact(hl,area,dir,waveform,bands);
+}
+enum EpdDrawError e0470_reader_ripple_with_waveform_timed(EpdiyHighlevelState *hl,EpdRect area,e0470_turn_dir_t dir,const EpdWaveform *wave,unsigned bands,unsigned ticks){
+    assert(ticks==3&&bands==4);
+    return e0470_reader_ripple_with_waveform(hl,area,dir,wave,bands);
 }
 enum EpdDrawError e0470_page_turn_with_waveform_compact(EpdiyHighlevelState* state, EpdRect area,
     e0470_turn_dir_t dir, const EpdWaveform* waveform, unsigned bands) {

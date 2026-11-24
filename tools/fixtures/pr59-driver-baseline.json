@@ -220,20 +220,14 @@
   },
   "approved_overrides": {
     "boards/pico/src/main/sleep.c": {
-      "sha256": "124347083212963c5ef2ef96a69655889d18a111f23d8b41286079e8bf5c578b",
-      "user_decision": "用户2026-11-04要求Pico四种锁屏样式一起优化且保留保护：正常锁屏/浅睡解锁单次GC16、页面恢复后重启网络，拼贴提示只局部GC16；反馈/绘图/输出失败保留原清屏，缓存/PIN/深睡策略及波形不变。 / User2026-11-04 extends the Pico optimization to all four lock styles: one GC16 lock/light-wake restore, deferred network restart and local GC16 collage feedback; retain clearing on feedback/art/output failure and preserve cache/PIN/deep-sleep/waveform behavior. 用户2026-11-04报告透明书封透字并要求修复：仅透明书封入锁增加一次原GC16白目标后输出最终图，不改原表、供电与解锁逻辑，分配/显示失败沿用清屏兜底。 / User2026-11-04 authorizes one calibrated white GC16 target before transparent-cover art to address ghosting, retaining raw tables, power, unlock logic and allocation/display-failure recovery. 用户确认透明书封不再透字后要求其他类型一并修复：将一次GC16白目标+最终图扩展到Pico四种锁屏，异常清屏与解锁保护保持。 / After device confirmation, the user requests the same white-target plus final-image sequence for all four Pico lock styles, retaining failure recovery and unlock protection.",
-      "reason": "随机壁纸锁屏先汇合可取消预热，成功推屏后提交图片；既有清屏、供电/PIN/恢复路径保持。 / Random wallpaper locks join cancellable warming and commit after presentation; retain clearing, power/PIN and restore paths.",
-      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
-      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
-      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
+      "sha256": "b25e4127f5acfe8f935f2e3baaca7b8b989c04e7604b05ca04cf60c4dfe640b6",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110 waveform integration with fork Clear ripple support."
     },
     "main/sleep.h": {
-      "sha256": "1a4c222dd1a6684401cdf23cae1d508346f86c030239e509f9f60c6160453393",
-      "pull_request": 71,
-      "reason": "Retain the merged PR71 API; User2026-11-04 all-style Pico lock optimization updates only the local-GC16 collage-feedback contract comment. No declarations or S31 behavior changed.",
-      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
-      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
-      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
+      "sha256": "f4323a7252a88981820d5887618aa1fb2f4eb459528a0edf4045c3c35e4b98df",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
     },
     "boards/metalio47/src/main/sleep.c": {
       "sha256": "207f47bcae8f0054120c514acda7bfce70e8aa079ed4518389e3de594440db94",
@@ -252,13 +246,9 @@
       "reason": "User2026-11-09: align S31 displayed battery estimation/filter/wake reset to official v2.0.77; preserve charger control and Pico."
     },
     "boards/pico/src/main/display_reader_waveform.c": {
-      "sha256": "8297c27433019c82c809a79d92711065d219b03fb858b9cd69f72e0a8ee54640",
-      "reason": "Upstream reader API and ordinary-turn update at eb67bd7 with the Pico Clear ripple profile retained.",
-      "source_pull_request": "https://github.com/ytyt-yt/read-pico-reader/pull/2",
-      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
-      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
-      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef",
-      "source_commit": "eb67bd73d5a561d5e7dbd45f65bfed17aedf2615"
+      "sha256": "41f86ab189d382ea2c59c36526ebb7889b53963e5dfc13979fefd72fa2391e0f",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110 waveform integration with fork Clear ripple support."
     },
     "boards/metalio47/src/main/display_reader_waveform.c": {
       "sha256": "907fcc07c8e93dc5c03f1ca647b34adc618ad4f883885da232fd66c40dadbd1e",
@@ -273,10 +263,9 @@
       "settings_short_motion_authorization": "User2026-11-07 requests an opt-in S31 settings-only14-phase motion accessor, keeping global DU14 off and existing reader/idle/raw profiles unchanged; local delivery only."
     },
     "components/e0470_epaper_waveform/include/e0470_epaper_waveform.h": {
-      "sha256": "748f1506470a50792bb9229eb4d7f67464e429c6bfaa9934504e832c781592ac",
-      "reason": "User2026-11-01 explicitly approved PR64 as authored, superseding the previous derived-waveform pin for this file.",
-      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases).",
-      "settings_short_motion_authorization": "User2026-11-07 requests an opt-in S31 settings-only14-phase motion accessor, keeping global DU14 off and existing reader/idle/raw profiles unchanged; local delivery only."
+      "sha256": "2d9ff9aca72a9bece1d0a44d20de488c6a32851ce0afab62532911f32db4e461",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
     },
     "boards/metalio47/src/components/read_pico/read_pico_sd.c": {
       "sha256": "10db62cc18ac3195b46bce6ec25f872bac53fd8381e4b97692071c0849409046",
@@ -309,13 +298,9 @@
       "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases)."
     },
     "boards/metalio47/src/main/display.c": {
-      "sha256": "f94dcdef6c91de5471ae6d22da39fe88e5499cd72c5dddfbcf8970d43025b28b",
-      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases).",
-      "reason": "Upstream S31 GL16, ripple and render integration at eb67bd7.",
-      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
-      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
-      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef",
-      "source_commit": "eb67bd73d5a561d5e7dbd45f65bfed17aedf2615"
+      "sha256": "339ae7c94f98abe4e947e991947e32895b9b19e7edbf80557f92ca91121dc098",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
     },
     "components/read_pico_pmu/README.md": {
       "sha256": "17e5f056acaf1d4102fef058c367afe7d4c1b159ee39aba779be0e86af03116d",
@@ -336,10 +321,9 @@
       "source_commit": "ba3d09e0ba95d06d04149465964428be3c81e998"
     },
     "main/display_reader_waveform.h": {
-      "sha256": "9196e83a342c2357e15f3909293919d84a30d12099f98c01723bb2f69c06727f",
-      "user_decision": "用户2026-11-03：S31残影/翻页优化定稿并直接提交合并（整页刷新恢复厂家完整48相，普通翻页对齐Pico的十二相擦白+四相重推黑）。/ User2026-11-03 finalizes the S31 ghosting/turn work and merges it directly (page refreshes use vendor full 48 phases; ordinary turns match Pico's twelve erase plus four black re-drive phases).",
-      "source_commit": "eb67bd73d5a561d5e7dbd45f65bfed17aedf2615",
-      "reason": "Upstream reader API and ordinary-turn update at eb67bd7 with the Pico Clear ripple profile retained."
+      "sha256": "6e5342fc4954f8fa14c2de87320dd07b07dad07db4d8a82fb52b705a4d62f2ed",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110 waveform integration with fork Clear ripple support."
     },
     "components/epdiy/src/highlevel.c": {
       "sha256": "399f528f19175429b29a6566e6b3a990abea8a51db1859818a12a251f4de9880",
@@ -359,20 +343,14 @@
       "reason": "User2026-11-04 adopts S31 data-only zero-prefix DMA and CKV-high frame start from vendor2.0.74; retain clocks, pipeline, interrupts, power and Moku waveforms."
     },
     "main/display.h": {
-      "sha256": "f25c9f0776fd69c7fd4397093a18357bd908717c0f74c6b00e975019a9171cb3",
-      "reason": "Upstream reader API and ordinary-turn update at eb67bd7 with the Pico Clear ripple profile retained.",
-      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
-      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
-      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef",
-      "source_commit": "eb67bd73d5a561d5e7dbd45f65bfed17aedf2615"
+      "sha256": "3eae506be9f28439b0cc11dea702959667f49d3ddb1595043e5ff16f14d836c0",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110 waveform integration with fork Clear ripple support."
     },
     "boards/pico/src/main/display.c": {
-      "sha256": "101ba6699e71afa1224edf7b9c404563002f317b910180a8b3502413900b4115",
-      "reason": "User2026-11-05 enables Pico reader idle HV retention with neutral pixel/VCOM release, exit/lock revocation and retained fault timeout; preserve original waveforms, voltages, timing and S31.",
-      "pico_settings_motion_authorization": "User2026-11-07 reports excessive dark ghosts during Pico settings motion; add only a scoped12-phase FOLLOW-derived profile (retain black7,white12/equal-white2) and recognize its FAST identity. Full-pixel list motion only; preserve existing Moku profiles, scan timing, reader/idle, power and S31. Local-only delivery.",
-      "integration_authorization": "User2026-11-16 requests upstream synchronization with fork feature parity: retain comic image turns, clear ripple, random wallpaper lifecycle and latest native board updates.",
-      "upstream_commit": "5c568a7d398b48407879880e43b26b6e52225682",
-      "fork_baseline": "052853e7edeae5101c512cd7bcdc81441270faef"
+      "sha256": "59e721bde254d7344ff03e5cced1ed1fc0a4cddcaf5db27df8de315178ecdcd0",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110 waveform integration with fork Clear ripple support."
     },
     "components/e0470_epaper_waveform/CMakeLists.txt": {
       "sha256": "595e9561dd93e7be298d3cd8372ae0e08024512bafd636513cc842fb105e5d1a",
@@ -416,9 +394,9 @@
       "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
     },
     "components/ble_page_turner/src/ble_page_turner.c": {
-      "sha256": "f455f0c9fd6218efbecb3e32e3d0b85de88fd2927409a86d6984133c0caea941",
-      "source_commit": "5c568a7d398b48407879880e43b26b6e52225682",
-      "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
+      "sha256": "1040c5d68a74ce100f85f803849dfccea41a7a9c7875de429ce8440f11311cb8",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
     },
     "components/cst836u/include/cst836u.h": {
       "sha256": "9f87fbc9f4fc4dab3f42e5dbbfa8a49f2d58264a8cdde6790707093de552f016",
@@ -466,9 +444,9 @@
       "reason": "User2026-11-16 requests latest upstream synchronization; exact upstream bytes, preserving board isolation and raw waveform data."
     },
     "boards/metalio47/src/components/e0470_page_turn/e0470_page_turn.c": {
-      "sha256": "1fecc7be27af0d41f4e78772f16bb3332aaaaf96c856a7e1b820a9028cdb7098",
-      "source_commit": "eb67bd73d5a561d5e7dbd45f65bfed17aedf2615",
-      "reason": "Upstream S31 GL16, ripple and render integration at eb67bd7."
+      "sha256": "ffb24a7b5db9630be512bd96546220bd62da4a5faed5f387d9281f85b7f8336f",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
     },
     "boards/metalio47/src/components/epdiy/src/output_common/render_context.c": {
       "sha256": "2aa97959c73300b7066c14cf3e1c82b7ff614fb0a89da2b2c912b98e938e062b",
@@ -486,14 +464,14 @@
       "reason": "Upstream S31 GL16, ripple and render integration at eb67bd7."
     },
     "boards/metalio47/src/components/read_pico/read_pico_board.c": {
-      "sha256": "00742741ba948a87662c0af7c3cf144f5b05555bdf43809257fcdbfd9473f59f",
-      "source_commit": "eb67bd73d5a561d5e7dbd45f65bfed17aedf2615",
-      "reason": "Use the authorized S31 1500 mV default and retain valid device calibration."
+      "sha256": "9af36cb842d9307ac6642353fd43c43c06943bcb9916df6c2c9f3170d9957cda",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
     },
     "components/e0470_page_turn/include/e0470_page_turn.h": {
-      "sha256": "9fe625f097b4424feb194b5e7033c43f26325ec4a80aad469d599dd749475114",
-      "source_commit": "eb67bd73d5a561d5e7dbd45f65bfed17aedf2615",
-      "reason": "Upstream S31 GL16, ripple and render integration at eb67bd7."
+      "sha256": "3d25b347564860afbe1fee000ce1c54daf96817d535377c220ba2eac93935a0a",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
     },
     "components/epdiy/src/epdiy.h": {
       "sha256": "af5e65f5d0bb5af4574d9d39b68ad729cea760f29bc8d554368ddf482df2ca5b",
@@ -504,6 +482,21 @@
       "sha256": "aeaeab5c291dfdbd124c89a21ac9b1a7b8f3b07ac9d5f3d83d711d15bafc0ecb",
       "source_commit": "eb67bd73d5a561d5e7dbd45f65bfed17aedf2615",
       "reason": "Upstream S31 GL16, ripple and render integration at eb67bd7."
+    },
+    "boards/pico/src/components/e0470_epaper_waveform/e0470_epaper_waveform.c": {
+      "sha256": "36f4379ea7ea25f49454cd7c3b26b62ecb4cb17bb9ec61147724f79d65e99a47",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
+    },
+    "components/read_pico_pmu/include/pico_soc_filter.h": {
+      "sha256": "0e017506eddc83425fa054cceef0c48bd50ba966a7dff823c500f98323437f40",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
+    },
+    "components/read_pico_pmu/pico_soc_filter.c": {
+      "sha256": "8f16af7ec1a451b6973f385b53a55a49ff9f2e4b9c625c91592ec6454cf5f93e",
+      "source_commit": "827d5a706c7ee3a7a50951541852a513d400be96",
+      "reason": "RC110/RC118 upstream release driver and waveform integration."
     }
   }
 }

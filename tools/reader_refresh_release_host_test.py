@@ -40,7 +40,10 @@ static int E0470_WAVEFORM,E0470_FULL_WAVEFORM,E0470_FOLLOW_WAVEFORM;
 #define display_main_normal_waveform() (&E0470_WAVEFORM)
 #endif
 typedef int EpdWaveform;
-static int reader_waveform,soft_turn_waveform;
+static int reader_waveform,soft_turn_waveform,gray8_turn,white_push;
+static const int *display_reader_gray8_turn_waveform(void){return &gray8_turn;}
+static const int *display_reader_white_push_waveform(void){return &white_push;}
+static bool app_settings_low_ghost(void){return false;}
 static const int *display_main_gray_waveform(void){return &reader_waveform;}
 static const int *display_reader_soft_turn_waveform(void){return &soft_turn_waveform;}
 static bool s_reader_clock_pending,s_input_settle,s_shelf_feedback_pending,s_cover_batch_present_pending,s_shelf_page_pending;
@@ -116,7 +119,7 @@ static enum EpdDrawError update_display_text_turn(void *hl,EpdRect area,int dir)
 static enum EpdDrawError update_display_reader_area(void *hl,const EpdWaveform *wave,int mode,EpdRect area,bool full){
  (void)hl;return push_area(full?14:13,wave,mode,area);
 }
-static bool present_reader_footer(app_ctx_t *ctx){
+static bool present_reader_metadata(app_ctx_t *ctx){
  (void)ctx;assert(calls==1);++footer_commits;s_reader_footer_pending=false;return true;
 }
 '''
@@ -145,6 +148,12 @@ static void book_weread_cover_cancel(void){++lock_cover_cancels;}
 static void app_book_ticket_sample(int64_t now_ms,bool visible){
  (void)now_ms;assert(!visible);++lock_stats_pauses;
 }
+static bool s_import_candidates,s_lock_reader_reopen,s_lock_reader_fullscreen;
+static char s_lock_reader_path[288],s_batch_message[128];
+static bool app_book_resume_context(char *p,size_t n,bool *full){(void)p;(void)n;(void)full;return false;}
+static bool book_import_running(void){return false;}
+static void book_import_cancel(void){assert(false);}
+static void copy_text(char *dst,size_t n,const char *s){snprintf(dst,n,"%s",s);}
 static void save_progress(void){++lock_saves;}
 static void lock_draw(void){}
 static void invalidate_prep(void){}
@@ -247,9 +256,9 @@ int main(void){
  // 新速读与普通共用连续文字资格，全文/页脚一次；清理和图像不被短路。
  // Fast BW shares consecutive-text eligibility, fusing the footer; cleanup and images take priority.
  for(int full=0;full<2;++full)for(int hide_status=0;hide_status<2;++hide_status) {
-  reset();tick=2;s_reader_fullscreen=full;immersive=hide_status;s_reader_footer_pending=false;s_area=reader_area();
-  assert(present(&ctx,APP_REDRAW_AREA)&&calls==1&&selected==20&&s_reader_text_frame);
-  same_area(areas[0],reader_area());assert(footer_commits==1);
+  reset();tick=3;s_reader_fullscreen=full;immersive=hide_status;s_reader_footer_pending=false;s_area=reader_area();
+  assert(present(&ctx,APP_REDRAW_AREA)&&calls==1&&selected==14&&waves[0]==&gray8_turn&&s_reader_text_frame);
+  same_area(areas[0],(EpdRect){0,0,684,1216});assert(footer_commits==1);
  }
  for(int kind=0;kind<9;++kind) {
   reset();tick=2;
@@ -263,7 +272,7 @@ int main(void){
   if(kind==7)s_presented_view=SHELF;
   present(&ctx,kind==8?APP_REDRAW_FULL:APP_REDRAW_AREA);assert(selected!=20);
  }
- reset();tick=2;fail=1;present(&ctx,APP_REDRAW_AREA);assert(selected==20&&!s_reader_text_frame);
+ reset();tick=3;fail=1;present(&ctx,APP_REDRAW_AREA);assert(selected==14&&waves[0]==&gray8_turn&&!s_reader_text_frame);
  puts("PASS: FastBW crops to body and defers metadata, preserves full/periodic/entry/image/background/panel routes and rejects failed history");
  puts("PASS: reader entry cleans once with complete GC16 including images/backgrounds, retaining failure retry; ordinary Pico turns use body GL16 with deferred metadata; periodic GC16, ripple, local controls, clock and cancellation retain their paths");
 }

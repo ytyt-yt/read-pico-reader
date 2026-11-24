@@ -76,9 +76,9 @@ void display_set_bulk_io(bool active) {
     ESP_LOGI(TAG, "bulk I/O scan margin %s", active ? "on" : "off");
 }
 
-// 高压轨在连续操作间保留8秒，避免反复500ms放电；像素驱动在每轮结束时立即释放。
-// Keep HV rails for an eight-second burst to avoid repeated 500ms discharge; release pixel drive after every output.
-#define RAILS_IDLE_TIMEOUT_MS 8000
+// 高压轨在连续操作间保留30秒，避免反复500ms放电；像素驱动在每轮结束时立即释放。
+// Keep HV rails for a thirty-second burst to avoid repeated 500ms discharge; release pixel drive after every output.
+#define RAILS_IDLE_TIMEOUT_MS 30000
 
 // 0 表示轨道已断电；否则是到期时间（ms），到点后主循环断电。
 // 0 means the rails are off; otherwise a deadline (ms) after which the loop powers them down.
@@ -95,6 +95,11 @@ void rails_keepalive(void) {
     pico_online_display_end(held);
 }
 
+// 低残影模式：阅读期间显式要求高压轨常开，直到离开阅读或关闭该模式。
+// Low-ghost mode: keep the HV rails on for the whole reading session until it is left or disabled.
+static bool s_rail_hold;
+void display_set_rail_hold(bool held) { s_rail_hold = held; }
+
 void rails_idle_check(int64_t now_ms) {
     if (!(drive_release_retry_ms && now_ms >= drive_release_retry_ms) &&
         !(rails_deadline_ms && now_ms >= rails_deadline_ms)) return;
@@ -106,6 +111,7 @@ void rails_idle_check(int64_t now_ms) {
     if (drive_release_retry_ms && now_ms >= drive_release_retry_ms)
         drive_release_retry_ms = read_pico_epd_release_drive() ? 0 : now_ms + 50;
     if (rails_deadline_ms != 0 && now_ms >= rails_deadline_ms) {
+        if (s_rail_hold) { rails_deadline_ms = now_ms + RAILS_IDLE_TIMEOUT_MS; pico_online_display_end(held); return; }
         rails_deadline_ms = 0;
         drive_release_retry_ms = 0;
         epd_poweroff();
@@ -716,7 +722,7 @@ static enum EpdDrawError update_display_reader_turn_unlocked(EpdiyHighlevelState
 
 static enum EpdDrawError update_display_water_turn_unlocked(EpdiyHighlevelState* hl, EpdRect area,
                                              e0470_turn_dir_t dir) {
-    const bool clear_text=app_settings_reader_turn_effect()==3;
+    const bool clear_text=app_settings_reader_turn_effect()==4;
     const EpdWaveform* wave=clear_text
         ? display_reader_clear_water_waveform():display_reader_water_waveform();
     return update_display_reader_turn_unlocked(hl,area,dir,E0470_TURN_FAST_BANDS,wave,true,clear_text);

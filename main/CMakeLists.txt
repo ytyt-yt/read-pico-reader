@@ -73,6 +73,7 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
         "app/crash_note.c"
         "app/app_registry.c"
         "ui/ui_kit.c"
+        "ui/ui_icons.c"
         "ui/ui_text_edit.c"
         "ui/ui_text_input.c"
         "ui/ui_ime.c"
@@ -118,6 +119,8 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
         "book/book_title.c"
         "book/book_weread_cover.c"
         "book/book_added.c"
+        "book/book_library.c"
+        "book/book_import.c"
         "book/book_ticket.c"
         "book/book_excerpt.c"
         "book/book_lock_collage.c"
@@ -156,7 +159,7 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
 # and leave the 5 MB app partition some headroom.
 if(NOT CMAKE_SCRIPT_MODE_FILE)
 foreach(kiiko_source IN LISTS kiiko_selected_sources)
-    if(kiiko_source MATCHES "(app_device_settings|book_epub|book_layout|book_store|book_source|book_txt|zip_reader|html_text|gbk|app_files)\\.c$")
+    if(kiiko_source MATCHES "(app_device_settings|book_epub|book_layout|book_store|book_library|book_source|book_txt|zip_reader|html_text|gbk|app_files|app_(comics|dashboard|cloud_sync|onboarding|transfer|image)|settings|lock_screen|ui_(nav|kit|keyboard|ime|online_fonts|home_clock|home_widget|menu)|book_(import|progress|ticket|lock_bookmark|lock_collage|weread_cover|xteink_sync|history_backup)|ota_(online|update)|online_font(_store)?)\\.c$")
         set_source_files_properties("${kiiko_source}" PROPERTIES COMPILE_OPTIONS "-Os")
     endif()
 endforeach()
@@ -212,7 +215,11 @@ if(METALIO_SHELF37_EXPERIMENT)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE KIIKO_S31_SHELF37=1)
 endif()
 option(METALIO_TEXT_RIPPLE_EXPERIMENT "Local four-level reader ripple experiment" OFF)
-if(METALIO_TEXT_RIPPLE_EXPERIMENT)
+option(METALIO_RC110_RIPPLE_EXPERIMENT "Local S31 RC110 reader ripple" OFF)
+if(METALIO_RC110_RIPPLE_EXPERIMENT)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE KIIKO_S31_RC110_RIPPLE=1)
+endif()
+if(METALIO_TEXT_RIPPLE_EXPERIMENT OR METALIO_RC110_RIPPLE_EXPERIMENT)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE KIIKO_S31_TEXT_RIPPLE=1)
 endif()
 
@@ -285,6 +292,7 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
         "app/crash_note.c"
         "app/app_registry.c"
         "ui/ui_kit.c"
+        "ui/ui_icons.c"
         "ui/ui_text_edit.c"
         "ui/ui_text_input.c"
         "ui/ui_ime.c"
@@ -329,6 +337,8 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
         "book/book_title.c"
         "book/book_weread_cover.c"
         "book/book_added.c"
+        "book/book_library.c"
+        "book/book_import.c"
         "book/book_ticket.c"
         "book/book_excerpt.c"
         "book/book_lock_collage.c"
@@ -364,7 +374,7 @@ kiiko_board_sources(kiiko_selected_sources "${CMAKE_CURRENT_LIST_DIR}" "app_main
 # so only this page is compiled for size.
 if(NOT CMAKE_SCRIPT_MODE_FILE)
 foreach(kiiko_source IN LISTS kiiko_selected_sources)
-    if(kiiko_source MATCHES "(app_device_settings|book_epub|book_layout|book_store|book_source|book_txt|zip_reader|html_text|gbk|app_files)\\.c$")
+    if(kiiko_source MATCHES "(app_device_settings|book_epub|book_layout|book_store|book_library|book_source|book_txt|zip_reader|html_text|gbk|app_files)\\.c$")
         set_source_files_properties("${kiiko_source}" PROPERTIES COMPILE_OPTIONS "-Os")
     endif()
 endforeach()
@@ -397,12 +407,25 @@ endif()
 
 if(NOT KIIKO_BOARD_METALIO47)
     # Keep recovery and storage compatible with the existing 4 MiB application slots.
-    # Size-optimize settings and file/transfer screens rather than renderer and decoder loops.
+    # Size-optimize management, setup, home and lock artwork; retain reader/font/decoder loops.
     foreach(source IN LISTS kiiko_selected_sources)
-        if(source MATCHES "/(settings|apps/app_(device_settings|files|transfer|onboarding))[.]c$")
+        if(source MATCHES "(^|/)(settings|lock_screen|ui/ui_(menu|kit|nav)|book/book_(added|library|import|progress|title|store|cover_auto|ticket|lock_collage|lock_bookmark)|book/book_(xteink_sync|weread_cover|history_backup)|boot_state|factory_reset|setup_state|lock_pin(_flow)?|time_service|book/book_index_cache|ui/ui_(pinpad|ime|home_clock|home_widget|wallpaper)|apps/(app_cloud_sync|usb_storage|file_tree|file_search)|font/online_font(_store)?|ota_(online|update|release)|ui/ui_(online_fonts|keyboard)|ui/datamatrix|factory/pmu_selftest|apps/app_(device_settings|files|transfer|onboarding|dashboard|image))[.]c$")
+            set_property(SOURCE "${source}" APPEND PROPERTY COMPILE_OPTIONS "-Os")
+        endif()
+        # 在线字体、联网升级、自检、键盘输入法与二维码不在阅读刷新路径上，同样按尺寸优化，给快速灰阶的 GRAY8 GL16 表腾出空间。
+        # Online fonts, network OTA, self-test, keyboard/IME and DataMatrix are off the reader refresh path; size-optimize them to fit the fast-gray GRAY8 GL16 table.
+        if(source MATCHES "/(online_font|online_font_store|ota_online|pmu_selftest|ui_keyboard|ui_ime|datamatrix)[.]c$")
+            set_property(SOURCE "${source}" APPEND PROPERTY COMPILE_OPTIONS "-Os")
+        endif()
+        # 在线字体、联网升级、自检、键盘输入法与二维码不在阅读刷新路径上，同样按尺寸优化，给快速灰阶的 GRAY8 GL16 表腾出空间。
+        # Online fonts, network OTA, self-test, keyboard/IME and DataMatrix are off the reader refresh path; size-optimize them to fit the fast-gray GRAY8 GL16 table.
+        if(source MATCHES "/(online_font|online_font_store|ota_online|pmu_selftest|ui_keyboard|ui_ime|datamatrix)[.]c$")
             set_property(SOURCE "${source}" APPEND PROPERTY COMPILE_OPTIONS "-Os")
         endif()
     endforeach()
+    # 图标掩模表以 zlib 压缩存放，首次绘制时解压到 PSRAM，省下约 114 KB 应用分区。
+    # Store the icon-mask table zlib-compressed and inflate it into PSRAM on first draw, saving about 114 KB of app slot.
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE KIIKO_UI_ICONS_DEFLATE=1)
     option(PICO_MAIN_CLEAN_EXPERIMENT "Local Pico stronger root-switch white erasure" OFF)
     if(PICO_MAIN_CLEAN_EXPERIMENT)
         target_compile_definitions(${COMPONENT_LIB} PRIVATE KIIKO_PICO_MAIN_CLEAN=1)

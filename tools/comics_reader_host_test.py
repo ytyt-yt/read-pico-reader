@@ -44,6 +44,7 @@ static char s_reader_notice[64],returned_directory[288],returned_message[128];
 static int64_t s_reader_notice_until;
 static size_t s_comic_index,s_chapter,s_page,s_jump_offset,s_selected_toc;
 static int s_comic_return_page=2,s_comic_open_position,s_requested_comic_page;
+static int64_t s_resume_media_deadline_ms;
 static bool s_requested_comic,s_requested_open_home,s_requested_resume_mode;
 static bool default_fullscreen;
 static bool app_settings_reader_default_fullscreen(void){return default_fullscreen;}

@@ -7,6 +7,9 @@
  * 冻结：目标画面不得丢失；白色基准只作用于后缓冲。
  * Frozen: Preserve the requested picture; the white baseline affects only the back buffer.
  */
+#ifndef TEST_RAILS_IDLE_MS
+#define TEST_RAILS_IDLE_MS 8000
+#endif
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -333,10 +336,10 @@ int main(void) {
     // 图片水波纹先用完整预装余量，成功后恢复普通队列；不改变时钟。
     // Image ripple uses full prefill headroom, restores ordinary queues on success and keeps clocks unchanged.
     water_result = EPD_DRAW_SUCCESS;
-    for (reader_effect=1;reader_effect<=3;reader_effect+=2)
+    for (reader_effect=1;reader_effect<=4;reader_effect+=3)
     for (int bulk = 0; bulk < 2; ++bulk) {
-        expected_water_waveform=reader_effect==3?&reader_clear:&reader_soft;
-        expected_water_scan=reader_effect==3?READ_PICO_EPD_SCAN_FULL:READ_PICO_EPD_SCAN_FAST;
+        expected_water_waveform=reader_effect==4?&reader_clear:&reader_soft;
+        expected_water_scan=reader_effect==4?READ_PICO_EPD_SCAN_FULL:READ_PICO_EPD_SCAN_FAST;
         display_set_bulk_io(bulk != 0);
         int prior_clocks = clocks, prior_water = water_calls;
         assert(update_display_water_turn(&hl, (EpdRect){0, 0, 16, 16}, E0470_TURN_RTL) == EPD_DRAW_SUCCESS);
@@ -346,7 +349,7 @@ int main(void) {
     }
     // 清晰档失败仍沿原兜底恢复；空闲期间不能新增正文扫描或重驱旧帧。
     // Clear failures retain existing recovery; idle never scans the body or re-drives old history.
-    reader_effect=3;expected_water_waveform=&reader_clear;expected_water_scan=READ_PICO_EPD_SCAN_FULL;
+    reader_effect=4;expected_water_waveform=&reader_clear;expected_water_scan=READ_PICO_EPD_SCAN_FULL;
     for(int failure=0;failure<3;++failure) {
         water_calls=draws=clears=0;
         water_result=failure==0?EPD_DRAW_SUCCESS:failure==1?EPD_DRAW_NO_PHASES_AVAILABLE:EPD_DRAW_OTHER_ERROR;
@@ -361,7 +364,7 @@ int main(void) {
     }
     expected_water_waveform=&E0470_WAVEFORM;
     expected_water_scan=READ_PICO_EPD_SCAN_FAST;
-    reader_effect=3;
+    reader_effect=4;
     for (int failure=0;failure<3;++failure) {
         memcpy(front,target,FB_BYTES);memset(back,0x55,FB_BYTES);
         water_calls=draws=clears=0;
@@ -398,9 +401,9 @@ int main(void) {
     rails_idle_check(20099); assert(drive_releases == old_releases + 1);
     rails_idle_check(20100); assert(!drive_active && drive_releases == old_releases + 2);
     unsigned old_offs = poweroffs;
-    rails_idle_check(27999); assert(poweroffs == old_offs && drive_releases == old_releases + 2);
-    rails_idle_check(28000); assert(poweroffs == old_offs + 1);
-    rails_idle_check(28001); assert(poweroffs == old_offs + 1);
+    rails_idle_check(20000+TEST_RAILS_IDLE_MS-1); assert(poweroffs == old_offs && drive_releases == old_releases + 2);
+    rails_idle_check(20000+TEST_RAILS_IDLE_MS); assert(poweroffs == old_offs + 1);
+    rails_idle_check(20000+TEST_RAILS_IDLE_MS+1); assert(poweroffs == old_offs + 1);
     assert(draws == old_draws && clears == old_clears);
     assert(!memcmp(front, target, FB_BYTES) && !memcmp(back, target, FB_BYTES));
     now_us = INT64_C(3640000000);
@@ -410,14 +413,14 @@ int main(void) {
     old_offs = poweroffs; old_releases = drive_releases;
     rails_idle_check(3640049); assert(drive_releases == old_releases && poweroffs == old_offs);
     rails_idle_check(3640050); assert(drive_active && poweroffs == old_offs);
-    rails_idle_check(3647999); assert(poweroffs == old_offs);
-    rails_idle_check(3648000); assert(!drive_active && poweroffs == old_offs + 1);
+    rails_idle_check(3640000+TEST_RAILS_IDLE_MS-1); assert(poweroffs == old_offs);
+    rails_idle_check(3640000+TEST_RAILS_IDLE_MS); assert(!drive_active && poweroffs == old_offs + 1);
     old_releases = drive_releases;
-    rails_idle_check(3658000); assert(drive_releases == old_releases && poweroffs == old_offs + 1);
+    rails_idle_check(3640000+TEST_RAILS_IDLE_MS+10000); assert(drive_releases == old_releases && poweroffs == old_offs + 1);
     release_failures = 0;
     assert(draws == old_draws && clears == old_clears && !ota_display_depth);
     assert(!memcmp(front, target, FB_BYTES) && !memcmp(back, target, FB_BYTES));
-    puts("reader idle rails: eight-second power-off and neutral-write fault timeout passed");
+    printf("reader idle rails: %d-ms power-off and neutral-write fault timeout passed\n",TEST_RAILS_IDLE_MS);
     puts("idle drive release: no-change output, bounded I2C retry, no extra scans and unchanged HV burst timeout passed");
     puts("display recovery: front retained, locked blind panel repair, single final frame, retry/failure recovery and bulk prefill passed");
 }

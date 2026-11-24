@@ -9,6 +9,8 @@
 #include "display_reader_waveform.h"
 #include "e0470_epaper_waveform.h"
 
+static bool low_ghost=true;
+bool app_settings_low_ghost(void){return low_ghost;}
 static enum EpdRotation test_rotation;
 int epd_width(void) { return 1216; }
 int epd_height(void) { return 684; }
@@ -230,5 +232,8 @@ int main(void) {
     puts("PASS: Pico Clear ripple retains all256 complete48-phase GL16 transitions,14 equal-middle-gray re-drives, twelve whole-white/four black-redrive phases, three final holds,65 phases and cached identity");
     puts("PASS: legacy text/ordinary/DU profiles and source LUTs retained; optical validation pending");
     }
+    low_ghost=false;
+    assert(e0470_waveform_phases(display_reader_soft_turn_waveform(),MODE_GL16)->phases==vendor->phases);
+    assert(display_reader_water_waveform()==display_reader_text_waveform());
     return 0;
 }

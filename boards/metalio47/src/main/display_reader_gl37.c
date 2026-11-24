@@ -2,8 +2,12 @@
  * SPDX-FileCopyrightText: 2026 mindreset
  * SPDX-License-Identifier: Apache-2.0
  *
- * 中文：S31 阅读专用 GL16：37 相文字/面板、八带水波纹及收起归一。
- * English: Reader-only S31 GL16 profiles: 37-phase text/sheets, eight-band ripple and dismissal normalization.
+ * 中文：S31 阅读专用 GL16：37 相文字/面板、水波纹及收起归一。
+ * English: Reader-only S31 GL16 profiles: 37-phase text/sheets, ripple and dismissal normalization.
+ * 用户2026-11-20修订：阅读水波纹在同轮条带中先18相擦白、1相保持，再逐字灰阶从白重建；原有各表保持。
+ * User2026-11-20: reader ripple erases for18 phases, holds once, then rebuilds from the existing white-origin gray sequences; retain the base profiles.
+ * 用户2026-11-19修订：水波纹等黑/灰保持，白色目标在尾部三拍补白，最后一拍保持；非白目标及其他表保持。
+ * User2026-11-19 revision: ripple holds equal black/grays, reinforces white targets in three tail phases and holds the final phase; retain nonwhite targets and other profiles.
  * 用户2026-11-18：普通文字去掉剥除擦白后遗留的前导空等，只前移整段有效序列；相数、脉冲顺序/数量及变白列不改。
  * User2026-11-18: ordinary text advances active sequences past erase-stripped leading holds; retain phase count, pulse order/counts and the white-target column.
  * 冻结：只派生原厂 GL48，不修改共享 LUT、主页、系统列表或永久标定。
@@ -186,12 +190,33 @@ static int gray_derivative(uint8_t (*data)[16][4], bool image) {
     return frames;
 }
 
+static bool gray_water_tail(uint8_t (*data)[16][4]) {
+    const EpdWaveform *wave = display_reader_gray_waveform(DISPLAY_READER_GRAY_WATER);
+    const EpdWaveformPhases *base = e0470_waveform_phases(wave, MODE_GL16);
+    if (!base || base->phases != GRAY_PHASES || !base->luts || base->phase_times) return false;
+    memcpy(data, base->luts, GRAY_PHASES * 64);
+    // 不擦白两页重合的字芯/灰边，避免短暂出现旧字的白色轮廓。
+    // Hold overlapping cores/gray edges instead of briefly exposing an erased old-text outline.
+    for (int gray = 0; gray < 16; ++gray)
+        for (int phase = 0; phase < GRAY_PHASES; ++phase) gray_set(data, phase, gray, gray, 0);
+    // 白底维护移到尾部：既有末白相加两拍补白，白字旧影和空白区域一起整理，末相仍保持。
+    // Move maintenance to the tail: extend the existing final white phase by two pushes for old-ink and blank white targets,then hold the last phase.
+    enum { TAIL_WHITE_PHASES = 3, TAIL_HOLD_PHASES = 1 };
+    const int end = GRAY_PHASES - TAIL_HOLD_PHASES;
+    for (int from = 0; from < 16; ++from)
+        for (int phase = end - TAIL_WHITE_PHASES; phase < end; ++phase)
+            gray_set(data, phase, 15, from, 2);
+    return true;
+}
+
 const EpdWaveform *display_reader_gray_waveform(display_reader_gray_profile_t profile) {
     if ((unsigned)profile >= DISPLAY_READER_GRAY_COUNT) return NULL;
     reader_gray_table_t *table = &s_gray[profile];
     if (table->phases.luts) return &table->waveform;
     int frames = GRAY_PHASES;
-    if (profile == DISPLAY_READER_GRAY_BACKGROUND || profile == DISPLAY_READER_GRAY_IMAGE) {
+    if (profile == DISPLAY_READER_GRAY_WATER_TAIL) {
+        if (!gray_water_tail(table->data)) return NULL;
+    } else if (profile == DISPLAY_READER_GRAY_BACKGROUND || profile == DISPLAY_READER_GRAY_IMAGE) {
         frames = gray_derivative(table->data, profile == DISPLAY_READER_GRAY_IMAGE);
     } else if (profile == DISPLAY_READER_GRAY_NORMALIZE || profile == DISPLAY_READER_GRAY_NORMALIZE_GRAY) {
         const EpdWaveform *ink = display_reader_gray_waveform(DISPLAY_READER_GRAY_PAGE);
@@ -219,4 +244,32 @@ const EpdWaveform *display_reader_gray_waveform(display_reader_gray_profile_t pr
     table->waveform = (EpdWaveform){.num_modes = 1, .num_temp_ranges = 1,
         .mode_data = table->modes, .temp_intervals = E0470_FULL_WAVEFORM.temp_intervals};
     return &table->waveform;
+}
+
+// One lazy S31-only table; profile switches reuse it instead of retaining another full set.
+const EpdWaveform *display_reader_ripple_waveform(display_reader_gray_profile_t profile) {
+    enum { ERASE = 18, PAUSE = 1, CAPACITY = 64 };
+    static READER_GRAY_RAM uint8_t data[CAPACITY][16][4];
+    static EpdWaveformPhases phases;
+    static const EpdWaveformPhases *ranges[1];
+    static EpdWaveformMode mode;
+    static const EpdWaveformMode *modes[1];
+    static EpdWaveform waveform;
+    static int cached = -1;
+    if(cached == (int)profile && phases.luts)return &waveform;
+    const EpdWaveform *base = display_reader_gray_waveform(profile);
+    const EpdWaveformPhases *source = e0470_waveform_phases(base, MODE_GL16);
+    if(!source || !source->luts || source->phase_times || source->phases <= 0 ||
+       source->phases + ERASE + PAUSE > CAPACITY)return NULL;
+    memset(data, 0, sizeof(data));
+    for(int to=0;to<16;++to)for(int from=0;from<16;++from) {
+        for(int f=0;f<ERASE;++f)gray_set(data,f,to,from,2);
+        // All pixels now start at white, including equal glyphs erased by the transition.
+        for(int f=0;f<source->phases;++f)
+            gray_set(data,ERASE+PAUSE+f,to,from,e0470_phase_action(source,f,to,15));
+    }
+    phases=(EpdWaveformPhases){source->phases+ERASE+PAUSE,(const uint8_t*)data,NULL};
+    ranges[0]=&phases;mode=(EpdWaveformMode){MODE_GL16,1,ranges};modes[0]=&mode;
+    waveform=*base;waveform.num_modes=1;waveform.mode_data=modes;cached=(int)profile;
+    return &waveform;
 }

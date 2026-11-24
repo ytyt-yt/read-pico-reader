@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "version": "0.3.3-rc108",
+  "version": "0.3.3-rc110",
   "project": "Read_Pico",
   "board": "RDP-G01-W",
   "layout": "pico-dual-4m-v1",
   "minimum_base_version": "0.3.3-rc72",
-  "url": "https://wegooo-cell.github.io/read-pico-reader/Pico-update-0.3.3-rc108.bin",
-  "size": 4171440,
-  "sha256": "61b60317be5c15ddb650ca19266cad281d61607f0d6aa111e7cd333395b8710e",
-  "notes": "书架提前加载，封面整页显示，切页和开书可打断。\nTXT 封面支持 Z-Library 和手选小图，保存到 TF 卡。\n票根校准章节和阅读时长，修复 TXT 导入和异常续读。\n页码局部刷新，继续阅读去掉浅灰背景。"
+  "url": "https://wegooo-cell.github.io/read-pico-reader/Pico-update-0.3.3-rc110.bin",
+  "size": 3997152,
+  "sha256": "8406aab5067d9e32acb0c73918db25f6cbc10350657f33cce5476f12f2927720",
+  "notes": "重做书架目录导入、管理和排序；重扫清空后重新选书，文件进度保留；修复初次导入提示、作者遮挡、排版范围、进度及配置恢复。"
 }

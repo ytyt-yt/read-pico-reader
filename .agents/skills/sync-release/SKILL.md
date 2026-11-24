@@ -19,7 +19,7 @@ Defaults: `origin` = `ytyt-yt/read-pico-reader`; `upstream` = `wegooo-cell/read-
 
 4. Read `docs/BOARDS.md`. Build clean final main through `tools/build_firmware.py --board all`, with matching SDKs and isolated board outputs. Keep upstream versions from `boards/<board>/board.json`; inject a unique `-fork.YYYYMMDD` suffix into the actual firmware version, respecting its length limit. Pin the commit and version injection in a reproducible recipe. Store outputs under ignored `build/fork-release-<stamp>/`; preserve published `flash/` files.
 
-5. Verify board/chip/project/version, image checksums, both OTA slot limits, source-view consistency, and partition compatibility. Test the original TF updater against the full candidate image, including version/board/size rejection and failure protection. Keep hardware and partition changes outside this workflow; distinguish host checks from device validation.
+5. Include upstream hardware changes in routine syncs. Use each board's upstream release flags and matching bootloader, and verify affected drivers against the repository's board-specific constraints. Verify board/chip/project/version, image checksums, both OTA slot limits, source-view consistency, and partition compatibility. Keep partition changes outside this workflow. Test the original TF updater against the full candidate image, including version/board/size rejection and failure protection. State which changes require a USB bootloader update and distinguish host checks from device validation.
 
 6. Package 12 assets per board from the same build:
    - `Pico-update.bin` or `Metalio-S31-update.bin`, versioned Bin, TF ZIP, complete USB ZIP;

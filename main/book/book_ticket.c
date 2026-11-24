@@ -132,7 +132,7 @@ static void cover_draw(uint8_t *fb, const uint8_t *gray, unsigned width, unsigne
             }
     } else {
         ui_fill_rect_fast(box, UI_GRAY_LIGHT, fb);
-        char short_title[96]; snprintf(short_title, sizeof(short_title), "%s", title);
+        char short_title[96]; snprintf(short_title, sizeof(short_title), "%.*s", (int)sizeof(short_title)-1, title);
         text_fit(short_title, 32, box.width - 20);
         ui_text_vc(fb, box.x + box.width / 2, box.y + box.height / 2, 32,
                    short_title, EPD_DRAW_ALIGN_CENTER, false);

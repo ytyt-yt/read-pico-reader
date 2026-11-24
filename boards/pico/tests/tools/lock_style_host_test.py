@@ -47,6 +47,7 @@ static bool s_boot_lock_active,s_boot_lock_known,s_boot_lock_draw;
 static unsigned read_pico_pmu_lock_key_serial(void){return 0;}
 static void lock_resume_service(void){}
 static uint8_t pixels[FRAME_BYTES],panel[FRAME_BYTES],history[FRAME_BYTES],style,current_background=0x32;
+static bool s_lock_deep_ready=true;
 static bool frame_ready, s_lock_feedback_failed, s_lock_feedback_visible, feedback_seen, final_ok=true;
 static unsigned full_presents, entry_clears, exit_clears, exit_white;
 static bool unlocking,recovery_ok=true,hint_visible;
@@ -125,7 +126,7 @@ static int epd_height(void){return 1216;}
 for name in ('draw_wallpaper', 'present_clean_lock', 'enter_lock_and_sleep', 'app_lock_boot_gate'):
     unit += function(name, ROOT/'main/sleep.c') + '\n'
 unit += r'''
-static void reset(void){assert(!white_allocations);white_scans=0;white_ok=true;white_alloc_fail=false;current_background=0x32;memset(draws,0,sizeof(draws));fallback=presents=auths=font_begin=font_end=pause=resume=clear_resume=0;memset(pixels,0x32,FRAME_BYTES);memset(panel,0x32,FRAME_BYTES);memset(history,0x32,FRAME_BYTES);frame_ready=s_lock_feedback_failed=s_lock_feedback_visible=feedback_seen=false;full_presents=entry_clears=exit_clears=exit_white=0;unlocking=hint_visible=false;recovery_ok=true;final_ok=true;draw_ok=transfer_ok=true;timeout=reader=boot_cache=cache_ok=false;}
+static void reset(void){s_lock_deep_ready=true;assert(!white_allocations);white_scans=0;white_ok=true;white_alloc_fail=false;current_background=0x32;memset(draws,0,sizeof(draws));fallback=presents=auths=font_begin=font_end=pause=resume=clear_resume=0;memset(pixels,0x32,FRAME_BYTES);memset(panel,0x32,FRAME_BYTES);memset(history,0x32,FRAME_BYTES);frame_ready=s_lock_feedback_failed=s_lock_feedback_visible=feedback_seen=false;full_presents=entry_clears=exit_clears=exit_white=0;unlocking=hint_visible=false;recovery_ok=true;final_ok=true;draw_ok=transfer_ok=true;timeout=reader=boot_cache=cache_ok=false;}
 int main(void){
  EpdiyHighlevelState hl={.back_fb=history,.front_fb=pixels};int64_t ignore=0;
  // 两种来源的阅读背景只影响票根内容，不决定样式。/ Reader provenance affects ticket content, never the style.

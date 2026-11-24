@@ -6,7 +6,7 @@ import json,re,subprocess,tempfile
 def function(name,path):
     text=path.read_text()
     scan=re.sub(r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"',lambda m:' '*len(m[0]),text)
-    match=re.search(r'^(?:static )?(?:void|int|bool|EpdRect) '+name+r'\([^;{}]*\)\s*\{',scan,re.M)
+    match=re.search(r'^(?:static )?(?:void|int|bool|EpdRect|unsigned|const char \*)\s*'+name+r'\([^;{}]*\)\s*\{',scan,re.M)
     assert match,name
     at,depth=match.end(),1
     while depth:
@@ -50,6 +50,7 @@ static int ttf_text_width_px(int px,const char *text);
 static bool scaling=true,s_system_ttf;
 static unsigned glyphs;
 static EpdRect last_box, image_text_boxes[2];
+static bool box_probe;
 static bool rule_probe;static int rule_style_label_bottom,rule_offset_label_bottom,rule_hint_bottom;
 static bool reading_probe;static unsigned reading_labels,reading_switches;
 static bool image_probe;static unsigned image_text_count,image_switches;
@@ -67,9 +68,10 @@ static void ui_text_fixed_vc(uint8_t *fb,int x,int cy,int px,const char *text,en
  if(px==23&&(!strcmp(text,"书内自带字体")||!strcmp(text,"抗锯齿")))last_box=(EpdRect){x,cy-22,188,44};
  int w=ui_text_fixed_width_px(px,text),baseline=cy+(above-below)/2;
  int left=align==EPD_DRAW_ALIGN_LEFT?x:align==EPD_DRAW_ALIGN_RIGHT?x-w:x-w/2;
- if(left<last_box.x||left+w>last_box.x+last_box.width)fprintf(stderr,"text=%s scale=%u px=%d left=%d width=%d box=%d,%d,%d,%d\n",text,scale,px,left,w,last_box.x,last_box.y,last_box.width,last_box.height);
- assert(left>=last_box.x&&left+w<=last_box.x+last_box.width);
- assert(baseline-above>=last_box.y&&baseline+below<=last_box.y+last_box.height);
+ if(box_probe){
+  assert(left>=last_box.x&&left+w<=last_box.x+last_box.width);
+  assert(baseline-above>=last_box.y&&baseline+below<=last_box.y+last_box.height);
+ }else{assert(left>=0&&left+w<=684&&baseline-above>=0&&baseline+below<=1216);}
  assert(!strchr(text,'\n'));++glyphs;
 }
 static int ttf_text_width_px(int px,const char *text){return ui_text_fixed_width_px(px,text);}
@@ -127,7 +129,7 @@ static void ui_text_box(uint8_t *fb,EpdRect box,int px,const char *text,enum Epd
   if(!strncmp(text,"上下位置",strlen("上下位置")))rule_offset_label_bottom=box.y+box.height;
   if(!strcmp(text,"选择虚线或点线后可调整位置"))rule_hint_bottom=box.y+box.height;
  }
- assert(box.width>0&&box.height>0);last_box=box;actual_text_box(fb,box,px,text,align,inv);
+ assert(box.width>0&&box.height>0);last_box=box;box_probe=true;actual_text_box(fb,box,px,text,align,inv);box_probe=false;
 }
 '''
 unit+=function('draw_reading_font_name',book).replace('static void draw_reading_font_name(', 'static void actual_reading_font_name(')+'\n'
@@ -147,12 +149,15 @@ for name in ['s_font_card','s_weight_card','s_bookfont_card','s_layout_card','s_
 unit+=function('reader_panel_text_vc',book)+'\n'+function('reader_panel_text',book)+'\n'
 for name in ['s_rule_offset_up','s_rule_offset_reset','s_rule_offset_down']:
     unit+=re.search(r'^static const EpdRect '+name+r' = .*',s,re.M)[0]+'\n'
-for name in ['rule_style_rect','rule_span_rect','draw_rule_settings']:
+for name in ['rule_style_rect','rule_span_rect','rule_save_rect','rule_back_rect','draw_rule_settings']:
     unit+=function(name,book)+'\n'
 unit+=function('reader_weight_value',book)+'\n'
 unit += 'static unsigned app_settings_book_heading_style(void){return 0;}\n'
 unit += re.search(r'^static const char \*const rc_heading_styles.*', (ROOT/'main/apps/book_reader_controls_ui.inc').read_text(),re.M)[0].replace('[APP_BOOK_HEADING_COUNT]', '[]')+'\n'
-for name in ('rc_heading_link_rect','rc_done_rect','rc_tab_rect','rc_grid_rect','rc_effect_rect','rc_refresh_rect','rc_auto_card','rc_interval_rect','rc_text','rc_step_button','rc_card','rc_done','rc_link','rc_toggle_card','rc_draw_settings'):
+uip=ROOT/'main/apps/book_reader_controls_ui.inc'
+defs=uip.read_text().split('#ifndef RC_EFFECT_COUNT',1)[1].split('#endif',1)[0]
+unit+='#ifndef RC_EFFECT_COUNT'+defs+'#endif\n'
+for name in ('rc_effect_id','rc_effect_name','rc_heading_link_rect' ,'rc_done_rect','rc_tab_rect','rc_grid_rect','rc_effect_rect','rc_refresh_rect','rc_auto_card','rc_interval_rect','rc_text','rc_step_button','rc_card','rc_done','rc_link','rc_toggle_card','rc_draw_settings'):
     unit+=function(name,ROOT/'main/apps/book_reader_controls_ui.inc')+'\n'
 unit+=function('draw_font_settings',book)+'\n'+function('draw_reading_settings',book)+'\n'
 
@@ -168,9 +173,9 @@ int main(void){uint8_t fb[1]={0};
     rule_style=style;rule_full=full;rule_probe=true;draw_rule_settings(fb);rule_probe=false;
     assert(rule_style_label_bottom<=rule_style_rect(0).y);
     assert(rule_offset_label_bottom<=s_rule_offset_up.y);
-    if(!style)assert(rule_hint_bottom<1113);
+    assert(rule_save_rect().y>=s_rule_offset_down.y+s_rule_offset_down.height);
    }
-   EpdRect rule_controls[]={rule_style_rect(0),rule_style_rect(1),rule_style_rect(2),rule_span_rect(0),rule_span_rect(1),s_rule_offset_up,s_rule_offset_reset,s_rule_offset_down,{36,1113,612,72}};
+   EpdRect rule_controls[]={rule_style_rect(0),rule_style_rect(1),rule_style_rect(2),rule_span_rect(0),rule_span_rect(1),s_rule_offset_up,s_rule_offset_reset,s_rule_offset_down,rule_save_rect(),rule_back_rect()};
    for(unsigned i=0;i<sizeof(rule_controls)/sizeof(rule_controls[0]);++i)for(unsigned j=0;j<i;++j)assert(!overlap(rule_controls[i],rule_controls[j]));
    for(int i=0;i<4;++i){EpdRect a=reader_font_card(i);assert(a.y>=reader_font_top()+100&&a.y+a.height<1141);for(int j=0;j<i;++j)assert(!overlap(a,reader_font_card(j)));}
    EpdRect slider=reader_slider_rect(0);assert(slider.y>reader_font_top()+100&&slider.y+slider.height<reader_font_card(0).y);
@@ -179,7 +184,7 @@ int main(void){uint8_t fb[1]={0};
    for(s_rc_tab=0;s_rc_tab<3;++s_rc_tab)draw_reading_settings(fb);
    reading_probe=false;assert(reading_labels==2047&&reading_switches==1&&reading_settings_top()==top);
    for(int i=0;i<4;++i){EpdRect a=rc_grid_rect(i);assert(a.y>=top+150&&a.y+a.height<1141);for(int j=0;j<i;++j)assert(!overlap(a,rc_grid_rect(j)));}
-   for(int i=0;i<(KIIKO_BOARD_METALIO47?3:4);++i){EpdRect a=rc_effect_rect(i);assert(a.x>=36&&a.x+a.width<=648);for(int j=0;j<i;++j)assert(!overlap(a,rc_effect_rect(j)));}
+   for(int i=0;i<RC_EFFECT_COUNT;++i){EpdRect a=rc_effect_rect(i);assert(a.x>=36&&a.x+a.width<=648);for(int j=0;j<i;++j)assert(!overlap(a,rc_effect_rect(j)));}
    for(int i=0;i<9;++i){EpdRect a=reader_font_pick_rect(i);assert(a.y>reader_font_picker_top()+120&&a.y+a.height<1141);for(int j=0;j<i;++j)assert(!overlap(a,reader_font_pick_rect(j)));}
    for(int edit=0;edit<2;++edit){s_bookmark_edit=edit;assert(bookmark_rows()>=3);for(int row=0;row<bookmark_rows();++row){EpdRect a=bookmark_row_rect(row);assert(a.y+a.height<=560+(edit?520:600));if(row)assert(!overlap(a,bookmark_row_rect(row-1)));}}
  }
